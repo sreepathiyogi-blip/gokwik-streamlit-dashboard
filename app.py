@@ -170,13 +170,19 @@ if uploaded_file:
     )
 
     save_data(df)
-    st.rerun()
+    with st.sidebar:
+        st.success("✅ File uploaded successfully")
+    # Don't stop here, continue to show dashboard
 
 # ---------------- LOAD DATA ----------------
-df = load_data()
-if df is None:
-    st.info("👆 Please upload a file to view the dashboard")
-    st.stop()
+if not uploaded_file:
+    df = load_data()
+    if df is None:
+        st.info("👆 Please upload a file to view the dashboard")
+        st.stop()
+else:
+    # Use the df we just processed
+    pass
 
 if "Order Date" not in df.columns:
     st.error("⚠️ Data corrupted. Please re-upload the file.")
