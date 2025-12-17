@@ -162,6 +162,10 @@ if uploaded_file:
 
     # Data cleaning
     df["Order Date"] = pd.to_datetime(df["Created At"], format="%d-%m-%Y %H:%M", errors="coerce")
+    
+    # Remove rows with invalid dates
+    df = df[df["Order Date"].notna()]
+    
     df["Grand Total"] = pd.to_numeric(df["Grand Total"], errors="coerce")
     df["Status"] = df["Merchant Order Status"]
     df["Payment Method"] = df["Payment Method"].astype(str).str.upper()
@@ -192,8 +196,15 @@ if "Order Date" not in df.columns:
 with st.sidebar:
     st.markdown("### 🔍 Filters")
     
-    min_date = df["Order Date"].min().date()
-    max_date = df["Order Date"].max().date()
+    # Ensure valid dates exist
+    valid_dates = df[df["Order Date"].notna()]
+    
+    if len(valid_dates) == 0:
+        st.error("No valid dates found in data")
+        st.stop()
+    
+    min_date = valid_dates["Order Date"].min().date()
+    max_date = valid_dates["Order Date"].max().date()
     
     date_range = st.date_input(
         "Date Range",
