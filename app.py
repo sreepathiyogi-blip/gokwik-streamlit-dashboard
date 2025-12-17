@@ -174,16 +174,59 @@ os.makedirs(DATA_DIR, exist_ok=True)
 # ---------------- HELPERS ----------------
 @st.cache_data(show_spinner=False)
 def load_data():
+    """Load data from Parquet or CSV fallback"""
     if os.path.exists(DATA_FILE):
-        return pd.read_parquet(DATA_FILE)
+        try:
+            df = pd.read_parquet(DATA_FILE)
+            # Ensure Order Date is datetime
+            if "Order Date" in df.columns:
+                df["Order Date"] = pd.to_datetime(df["Order Date"], errors='coerce')
+            return df
+        except Exception:
+            # Try CSV fallback
+            csv_file = DATA_FILE.replace('.parquet', '.csv')
+            if os.path.exists(csv_file):
+                df = pd.read_csv(csv_file)
+                if "Order Date" in df.columns:
+                    df["Order Date"] = pd.to_datetime(df["Order Date"], errors='coerce')
+                return df
     return None
 
 def save_data(df):
+    """Save data with proper type handling for Parquet compatibility"""
+    df = df.copy()
     df["__last_updated__"] = date.today()
-    df.to_parquet(DATA_FILE, index=False)
+    
+    # Convert categorical columns to string to avoid PyArrow issues
+    for col in df.columns:
+        if df[col].dtype.name == 'category':
+            df[col] = df[col].astype(str)
+        # Convert object columns to string (except datetime)
+        elif df[col].dtype == 'object' and col != 'Order Date':
+            df[col] = df[col].astype(str)
+    
+    # Ensure datetime columns are proper datetime type
+    if "Order Date" in df.columns:
+        df["Order Date"] = pd.to_datetime(df["Order Date"], errors='coerce')
+    
+    try:
+        df.to_parquet(DATA_FILE, index=False, engine='pyarrow')
+    except Exception as e:
+        # Fallback: save as CSV if Parquet fails
+        csv_file = DATA_FILE.replace('.parquet', '.csv')
+        df.to_csv(csv_file, index=False)
+        st.warning(f"⚠️ Saved as CSV instead of Parquet due to compatibility issue.")
 
 def read_file(file):
-    return pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
+    """Read CSV or Excel file"""
+    try:
+        if file.name.endswith(".csv"):
+            return pd.read_csv(file, encoding='utf-8')
+        else:
+            return pd.read_excel(file)
+    except UnicodeDecodeError:
+        # Try different encoding if UTF-8 fails
+        return pd.read_csv(file, encoding='latin-1')
 
 def hash_customer_name(name):
     """Hash customer name for privacy"""
@@ -192,6 +235,7 @@ def hash_customer_name(name):
     return hashlib.md5(str(name).encode()).hexdigest()[:8]
 
 def create_metric_card(label, value, delta=None, delta_color="normal"):
+    """Create HTML metric card"""
     delta_html = f'<div style="color: {"#10b981" if delta_color == "normal" else "#ef4444"}; font-size: 14px; font-weight: 600; margin-top: 8px;">{delta}</div>' if delta else ""
     
     return f"""
@@ -203,7 +247,10 @@ def create_metric_card(label, value, delta=None, delta_color="normal"):
     """
 
 def get_city_tier(state):
-    """Classify cities into tiers based on state (simplified logic)"""
+    """Classify cities into tiers based on state"""
+    if pd.isna(state):
+        return 'Tier 3'
+    
     tier_1_states = ['MAHARASHTRA', 'DELHI', 'KARNATAKA', 'TAMIL NADU', 'TELANGANA', 'WEST BENGAL', 'GUJARAT']
     tier_2_states = ['PUNJAB', 'HARYANA', 'RAJASTHAN', 'KERALA', 'MADHYA PRADESH', 'UTTAR PRADESH']
     
@@ -233,52 +280,67 @@ with st.sidebar:
     )
     
     st.markdown("---")
-    
-    if uploaded_file:
-        st.success("✅ File uploaded successfully")
 
 # ---------------- UPLOAD PROCESSING ----------------
 if uploaded_file:
-    df = read_file(uploaded_file)
-    df.columns = df.columns.str.strip()
+    try:
+        df = read_file(uploaded_file)
+        df.columns = df.columns.str.strip()
 
-    REQUIRED = [
-        "Order Number",
-        "Created At",
-        "Merchant Order Status",
-        "Payment Method",
-        "Grand Total"
-    ]
+        REQUIRED = [
+            "Order Number",
+            "Created At",
+            "Merchant Order Status",
+            "Payment Method",
+            "Grand Total"
+        ]
 
-    missing = [c for c in REQUIRED if c not in df.columns]
-    if missing:
-        st.error(f"❌ Missing columns: {', '.join(missing)}")
+        missing = [c for c in REQUIRED if c not in df.columns]
+        if missing:
+            st.error(f"❌ Missing required columns: {', '.join(missing)}")
+            st.stop()
+
+        # Data cleaning - handle multiple date formats
+        df["Order Date"] = pd.to_datetime(df["Created At"], errors="coerce", dayfirst=True)
+        
+        # Remove rows with invalid dates
+        initial_count = len(df)
+        df = df[df["Order Date"].notna()].copy()
+        removed_count = initial_count - len(df)
+        
+        if removed_count > 0:
+            st.warning(f"⚠️ Removed {removed_count} rows with invalid dates")
+        
+        if len(df) == 0:
+            st.error("❌ No valid data after date processing. Please check your file.")
+            st.stop()
+        
+        # Clean numeric data
+        df["Grand Total"] = pd.to_numeric(df["Grand Total"], errors="coerce").fillna(0)
+        
+        # Clean status and payment data
+        df["Status"] = df["Merchant Order Status"].astype(str)
+        df["Payment Method"] = df["Payment Method"].astype(str).str.upper()
+        df["Payment Type"] = df["Payment Method"].apply(
+            lambda x: "COD" if "COD" in str(x) else "Prepaid"
+        )
+        
+        # Hash customer names for privacy
+        if "Customer Name" in df.columns:
+            df["Customer ID"] = df["Customer Name"].apply(hash_customer_name)
+        
+        # Add city tier classification
+        if "Billing State" in df.columns:
+            df["City Tier"] = df["Billing State"].apply(get_city_tier)
+
+        save_data(df)
+        
+        with st.sidebar:
+            st.success(f"✅ Successfully loaded {len(df):,} orders")
+    
+    except Exception as e:
+        st.error(f"❌ Error processing file: {str(e)}")
         st.stop()
-
-    # Data cleaning - handle multiple date formats
-    df["Order Date"] = pd.to_datetime(df["Created At"], errors="coerce", dayfirst=True)
-    
-    # Remove rows with invalid dates
-    df = df[df["Order Date"].notna()]
-    
-    df["Grand Total"] = pd.to_numeric(df["Grand Total"], errors="coerce")
-    df["Status"] = df["Merchant Order Status"]
-    df["Payment Method"] = df["Payment Method"].astype(str).str.upper()
-    df["Payment Type"] = df["Payment Method"].apply(
-        lambda x: "COD" if "COD" in str(x) else "Prepaid"
-    )
-    
-    # Hash customer names for privacy
-    if "Customer Name" in df.columns:
-        df["Customer ID"] = df["Customer Name"].apply(hash_customer_name)
-    
-    # Add city tier classification
-    if "Billing State" in df.columns:
-        df["City Tier"] = df["Billing State"].apply(get_city_tier)
-
-    save_data(df)
-    with st.sidebar:
-        st.success("✅ File uploaded successfully")
 
 # ---------------- LOAD DATA ----------------
 if not uploaded_file:
@@ -378,23 +440,32 @@ with st.sidebar:
     st.info(f"**Last Updated:** {datetime.now().strftime('%d %b %Y, %I:%M %p')}")
 
 # ---------------- APPLY FILTERS ----------------
-filtered = df[
-    (df["Order Date"].dt.date >= date_range[0]) &
-    (df["Order Date"].dt.date <= date_range[1]) &
-    (df["Status"].isin(status_filter)) &
-    (df["Payment Type"].isin(payment_filter))
-]
+try:
+    filtered = df[
+        (df["Order Date"].dt.date >= date_range[0]) &
+        (df["Order Date"].dt.date <= date_range[1]) &
+        (df["Status"].isin(status_filter)) &
+        (df["Payment Type"].isin(payment_filter))
+    ].copy()
 
-# Apply City Tier filter
-if tier_filter and "City Tier" in filtered.columns:
-    filtered = filtered[filtered["City Tier"].isin(tier_filter)]
+    # Apply City Tier filter
+    if tier_filter and "City Tier" in filtered.columns:
+        filtered = filtered[filtered["City Tier"].isin(tier_filter)]
 
-# Apply UTM filters if available
-if utm_filter and "Utm Source" in filtered.columns:
-    filtered = filtered[filtered["Utm Source"].isin(utm_filter)]
+    # Apply UTM filters if available
+    if utm_filter and "Utm Source" in filtered.columns:
+        filtered = filtered[filtered["Utm Source"].isin(utm_filter)]
 
-if campaign_filter and "Utm Campaign" in filtered.columns:
-    filtered = filtered[filtered["Utm Campaign"].isin(campaign_filter)]
+    if campaign_filter and "Utm Campaign" in filtered.columns:
+        filtered = filtered[filtered["Utm Campaign"].isin(campaign_filter)]
+
+    if len(filtered) == 0:
+        st.warning("⚠️ No data matches the selected filters. Please adjust your filters.")
+        st.stop()
+
+except Exception as e:
+    st.error(f"Error applying filters: {str(e)}")
+    st.stop()
 
 # ---------------- KEY METRICS ----------------
 st.markdown('<div class="section-header">📈 Key Performance Indicators</div>', unsafe_allow_html=True)
@@ -403,7 +474,7 @@ col1, col2, col3, col4, col5, col6 = st.columns(6)
 
 total_orders = filtered["Order Number"].nunique()
 total_revenue = filtered["Grand Total"].sum()
-avg_order_value = filtered["Grand Total"].mean()
+avg_order_value = filtered["Grand Total"].mean() if len(filtered) > 0 else 0
 prepaid_orders = filtered[filtered["Payment Type"] == "Prepaid"].shape[0]
 cod_orders = filtered[filtered["Payment Type"] == "COD"].shape[0]
 
@@ -446,8 +517,9 @@ with col1:
         x_data = daily["Date"]
         title_text = "Daily Revenue & Orders"
     elif time_grain == "Weekly":
-        filtered["Week"] = filtered["Order Date"].dt.to_period('W').dt.start_time
-        daily = filtered.groupby("Week").agg({
+        filtered_copy = filtered.copy()
+        filtered_copy["Week"] = filtered_copy["Order Date"].dt.to_period('W').dt.start_time
+        daily = filtered_copy.groupby("Week").agg({
             "Grand Total": "sum",
             "Order Number": "count"
         }).reset_index()
@@ -455,8 +527,9 @@ with col1:
         x_data = daily["Date"]
         title_text = "Weekly Revenue & Orders"
     elif time_grain == "Monthly":
-        filtered["Month"] = filtered["Order Date"].dt.to_period('M').dt.start_time
-        daily = filtered.groupby("Month").agg({
+        filtered_copy = filtered.copy()
+        filtered_copy["Month"] = filtered_copy["Order Date"].dt.to_period('M').dt.start_time
+        daily = filtered_copy.groupby("Month").agg({
             "Grand Total": "sum",
             "Order Number": "count"
         }).reset_index()
@@ -464,8 +537,9 @@ with col1:
         x_data = daily["Date"]
         title_text = "Monthly Revenue & Orders"
     else:  # Yearly
-        filtered["Year"] = filtered["Order Date"].dt.year
-        daily = filtered.groupby("Year").agg({
+        filtered_copy = filtered.copy()
+        filtered_copy["Year"] = filtered_copy["Order Date"].dt.year
+        daily = filtered_copy.groupby("Year").agg({
             "Grand Total": "sum",
             "Order Number": "count"
         }).reset_index()
@@ -682,449 +756,3 @@ if "Billing State" in filtered.columns:
             state_data = state_data.sort_values("Revenue", ascending=True).tail(10)
             y_data = state_data["Revenue"]
             color_data = state_data["Revenue"]
-            title_text = "Top 10 States by Revenue"
-            text_data = [f"₹{x:,.0f}" for x in state_data["Revenue"]]
-        
-        fig = go.Figure(go.Bar(
-            x=y_data,
-            y=state_data["State"],
-            orientation='h',
-            marker=dict(
-                color=color_data,
-                colorscale='Viridis',
-                showscale=False
-            ),
-            text=text_data,
-            textposition='outside'
-        ))
-        
-        fig.update_layout(
-            title=dict(text=title_text, font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=60)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- ROW 4: UTM SOURCE & CAMPAIGN ANALYSIS ----------------
-st.markdown('<div class="section-header">📱 Marketing Performance Analysis</div>', unsafe_allow_html=True)
-
-col1, col2 = st.columns(2)
-
-with col1:
-    # UTM Source analysis
-    if "Utm Source" in filtered.columns:
-        utm_data = filtered.groupby("Utm Source").agg({
-            "Order Number": "count",
-            "Grand Total": "sum"
-        }).reset_index()
-        utm_data.columns = ["Source", "Orders", "Revenue"]
-        utm_data = utm_data.sort_values("Orders", ascending=False).head(10)
-        utm_data["AOV"] = utm_data["Revenue"] / utm_data["Orders"]
-        
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            x=utm_data["Source"],
-            y=utm_data["Orders"],
-            name="Orders",
-            marker=dict(color='#667eea'),
-            text=utm_data["Orders"],
-            textposition='outside',
-            yaxis='y'
-        ))
-        
-        fig.add_trace(go.Scatter(
-            x=utm_data["Source"],
-            y=utm_data["AOV"],
-            name="AOV",
-            mode='lines+markers',
-            marker=dict(color='#f093fb', size=10),
-            line=dict(color='#f093fb', width=3),
-            yaxis='y2'
-        ))
-        
-        fig.update_layout(
-            title=dict(text="UTM Source Performance: Orders & AOV", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=False, title="Source", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="AOV (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=60),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    # Campaign analysis
-    if "Utm Campaign" in filtered.columns:
-        campaign_data = filtered.groupby("Utm Campaign").agg({
-            "Order Number": "count",
-            "Grand Total": "sum"
-        }).reset_index()
-        campaign_data.columns = ["Campaign", "Orders", "Revenue"]
-        campaign_data = campaign_data.sort_values("Revenue", ascending=True).tail(10)
-        
-        fig = go.Figure(go.Bar(
-            x=campaign_data["Revenue"],
-            y=campaign_data["Campaign"],
-            orientation='h',
-            marker=dict(
-                color=campaign_data["Revenue"],
-                colorscale='Sunset',
-                showscale=False
-            ),
-            text=[f"₹{x:,.0f}" for x in campaign_data["Revenue"]],
-            textposition='outside'
-        ))
-        
-        fig.update_layout(
-            title=dict(text="Top 10 Campaigns by Revenue", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Revenue (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=False, title="", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=60)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- ROW 5: RFM ANALYSIS ----------------
-st.markdown('<div class="section-header">🎯 RFM Analysis (Recency, Frequency, Monetary)</div>', unsafe_allow_html=True)
-
-if "Customer ID" in filtered.columns:
-    # Calculate RFM metrics
-    current_date = filtered["Order Date"].max()
-    
-    rfm_data = filtered.groupby("Customer ID").agg({
-        "Order Date": lambda x: (current_date - x.max()).days,  # Recency
-        "Order Number": "count",  # Frequency
-        "Grand Total": "sum"  # Monetary
-    }).reset_index()
-    
-    rfm_data.columns = ["Customer ID", "Recency", "Frequency", "Monetary"]
-    
-    # Calculate RFM scores (1-5 scale)
-    rfm_data["R_Score"] = pd.qcut(rfm_data["Recency"], 5, labels=[5, 4, 3, 2, 1], duplicates='drop')
-    rfm_data["F_Score"] = pd.qcut(rfm_data["Frequency"].rank(method='first'), 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
-    rfm_data["M_Score"] = pd.qcut(rfm_data["Monetary"], 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
-    
-    rfm_data["RFM_Score"] = rfm_data["R_Score"].astype(str) + rfm_data["F_Score"].astype(str) + rfm_data["M_Score"].astype(str)
-    rfm_data["RFM_Total"] = rfm_data["R_Score"].astype(int) + rfm_data["F_Score"].astype(int) + rfm_data["M_Score"].astype(int)
-    
-    # Segment customers
-    def segment_customer(score):
-        if score >= 13:
-            return "Champions"
-        elif score >= 11:
-            return "Loyal"
-        elif score >= 9:
-            return "Potential"
-        elif score >= 7:
-            return "At Risk"
-        else:
-            return "Lost"
-    
-    rfm_data["Segment"] = rfm_data["RFM_Total"].apply(segment_customer)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        # RFM Segment Distribution
-        segment_counts = rfm_data["Segment"].value_counts().reset_index()
-        segment_counts.columns = ["Segment", "Customers"]
-        
-        color_map = {
-            "Champions": "#43e97b",
-            "Loyal": "#30cfd0",
-            "Potential": "#fee140",
-            "At Risk": "#fa709a",
-            "Lost": "#f093fb"
-        }
-        
-        colors = [color_map.get(seg, "#667eea") for seg in segment_counts["Segment"]]
-        
-        fig = go.Figure(data=[go.Bar(
-            x=segment_counts["Segment"],
-            y=segment_counts["Customers"],
-            marker=dict(color=colors),
-            text=segment_counts["Customers"],
-            textposition='outside'
-        )])
-        
-        fig.update_layout(
-            title=dict(text="Customer Segmentation (RFM)", font=dict(size=15, color='#1a1a1a')),
-            height=350,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Customers", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=50)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Recency Distribution
-        fig = go.Figure(data=[go.Histogram(
-            x=rfm_data["Recency"],
-            nbinsx=30,
-            marker=dict(
-                color='#667eea',
-                line=dict(color='white', width=1)
-            )
-        )])
-        
-        fig.update_layout(
-            title=dict(text="Recency Distribution (Days)", font=dict(size=15, color='#1a1a1a')),
-            height=350,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(title="Days Since Last Order", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(title="Customers", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=50)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col3:
-        # Frequency vs Monetary scatter
-        fig = go.Figure()
-        
-        fig.add_trace(go.Scatter(
-            x=rfm_data["Frequency"],
-            y=rfm_data["Monetary"],
-            mode='markers',
-            marker=dict(
-                size=rfm_data["RFM_Total"] * 2,
-                color=rfm_data["RFM_Total"],
-                colorscale='Viridis',
-                showscale=True,
-                colorbar=dict(title="RFM Score"),
-                line=dict(color='white', width=0.5)
-            ),
-            text=rfm_data["Customer ID"],
-            hovertemplate='<b>%{text}</b><br>Orders: %{x}<br>Revenue: ₹%{y:,.0f}<extra></extra>'
-        ))
-        
-        fig.update_layout(
-            title=dict(text="Frequency vs Monetary Value", font=dict(size=15, color='#1a1a1a')),
-            height=350,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Frequency (Orders)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Monetary (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=50)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- ROW 6: TOP 15 CUSTOMERS (HASHED) ----------------
-st.markdown('<div class="section-header">👥 Top 15 Customers by Lifetime Value</div>', unsafe_allow_html=True)
-
-if "Customer ID" in filtered.columns:
-    clv_data = df.groupby("Customer ID").agg({
-        "Order Number": "count",
-        "Grand Total": "sum",
-        "Order Date": ["min", "max"]
-    }).reset_index()
-    
-    clv_data.columns = ["Customer ID", "Total Orders", "Total Revenue", "First Order", "Last Order"]
-    clv_data = clv_data.sort_values("Total Revenue", ascending=False).head(15)
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            x=clv_data["Customer ID"],
-            y=clv_data["Total Revenue"],
-            name="Total Revenue",
-            marker=dict(color='#667eea'),
-            text=[f"₹{x:,.0f}" for x in clv_data["Total Revenue"]],
-            textposition='outside',
-            yaxis='y'
-        ))
-        
-        fig.add_trace(go.Scatter(
-            x=clv_data["Customer ID"],
-            y=clv_data["Total Orders"],
-            name="Orders",
-            mode='lines+markers',
-            marker=dict(color='#f093fb', size=10),
-            line=dict(color='#f093fb', width=3),
-            yaxis='y2'
-        ))
-        
-        fig.update_layout(
-            title=dict(text="Top 15 Customers: Revenue & Orders", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=False, tickangle=-45, title="Customer ID (Hashed)", tickfont=dict(color='#1a1a1a', size=9), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="Total Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=120),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Display table with hashed customer IDs
-        display_clv = clv_data[["Customer ID", "Total Orders", "Total Revenue"]].copy()
-        display_clv["Total Revenue"] = display_clv["Total Revenue"].apply(lambda x: f"₹{x:,.0f}")
-        
-        st.dataframe(
-            display_clv,
-            use_container_width=True,
-            height=400,
-            hide_index=True
-        )
-
-# ---------------- ROW 7: PRODUCTS & PAYMENT MIX ----------------
-st.markdown('<div class="section-header">🛍️ Product Analysis</div>', unsafe_allow_html=True)
-
-col1, col2 = st.columns(2)
-
-with col1:
-    # Top products
-    if "Product Name" in filtered.columns:
-        product_data = filtered.groupby("Product Name").agg({
-            "Order Number": "count",
-            "Grand Total": "sum"
-        }).reset_index()
-        product_data.columns = ["Product", "Orders", "Revenue"]
-        product_data = product_data.sort_values("Orders", ascending=False).head(10)
-        
-        fig = go.Figure(data=[
-            go.Bar(
-                x=product_data["Product"],
-                y=product_data["Orders"],
-                marker=dict(
-                    color=product_data["Revenue"],
-                    colorscale='Viridis',
-                    showscale=True,
-                    colorbar=dict(title="Revenue (₹)")
-                ),
-                text=product_data["Orders"],
-                textposition='outside'
-            )
-        ])
-        
-        fig.update_layout(
-            title=dict(text="Top 10 Products by Orders", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=False, tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=100)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    # Product-wise payment split
-    if "Product Name" in filtered.columns:
-        product_payment = filtered.groupby(["Product Name", "Payment Type"]).agg({
-            "Order Number": "count"
-        }).reset_index()
-        
-        top_products = filtered.groupby("Product Name")["Order Number"].count().nlargest(8).index.tolist()
-        product_payment = product_payment[product_payment["Product Name"].isin(top_products)]
-        
-        fig = go.Figure()
-        
-        for payment_type in ["Prepaid", "COD"]:
-            data = product_payment[product_payment["Payment Type"] == payment_type]
-            fig.add_trace(go.Bar(
-                name=payment_type,
-                x=data["Product Name"],
-                y=data["Order Number"],
-                marker=dict(color='#4facfe' if payment_type == "Prepaid" else '#f093fb')
-            ))
-        
-        fig.update_layout(
-            title=dict(text="Product-wise Payment Split (Top 8)", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            barmode='stack',
-            xaxis=dict(showgrid=False, tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=100),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- DATA TABLE ----------------
-st.markdown('<div class="section-header">📋 Detailed Order Data</div>', unsafe_allow_html=True)
-
-display_cols = [
-    "Order Number", "Order Date", "Status", "Payment Method", 
-    "Grand Total", "Customer ID", "Billing State", "Product Name", "City Tier"
-]
-display_cols = [col for col in display_cols if col in filtered.columns]
-
-st.dataframe(
-    filtered[display_cols].style.format({
-        "Grand Total": "₹{:,.0f}",
-        "Order Date": lambda x: x.strftime("%d %b %Y") if pd.notnull(x) else ""
-    }),
-    use_container_width=True,
-    height=400
-)
-
-# ---------------- DOWNLOAD ----------------
-st.markdown('<div class="section-header">⬇️ Export Data</div>', unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns([1, 1, 2])
-
-with col1:
-    st.download_button(
-        "📥 Download CSV",
-        filtered.drop(columns=["__last_updated__"], errors='ignore').to_csv(index=False),
-        file_name=f"gokwik_data_{datetime.now().strftime('%Y%m%d')}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
-
-with col2:
-    st.download_button(
-        "📊 Download Excel",
-        filtered.drop(columns=["__last_updated__"], errors='ignore').to_csv(index=False),
-        file_name=f"gokwik_data_{datetime.now().strftime('%Y%m%d')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
-
-# Footer
-st.markdown("---")
-st.markdown("""
-<div style="text-align: center; color: #666; padding: 20px;">
-    <p>GoKwik Order Analytics Dashboard | Built with Streamlit & Plotly</p>
-</div>
-""", unsafe_allow_html=True)
