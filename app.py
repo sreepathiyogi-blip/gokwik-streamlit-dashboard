@@ -756,3 +756,386 @@ if "Billing State" in filtered.columns:
             state_data = state_data.sort_values("Revenue", ascending=True).tail(10)
             y_data = state_data["Revenue"]
             color_data = state_data["Revenue"]
+            title_text = "Top 10 States by Revenue"
+            text_data = state_data["Revenue"].apply(lambda x: f"₹{x:,.0f}")
+        
+        fig = go.Figure(data=[go.Bar(
+            x=y_data,
+            y=state_data["State"],
+            orientation='h',
+            marker=dict(
+                color=color_data,
+                colorscale='Blues' if top10_metric == "Orders" else 'Greens',
+                showscale=False
+            ),
+            text=text_data,
+            textposition='auto'
+        )])
+        
+        fig.update_layout(
+            title=dict(text=title_text, font=dict(size=16, color='#1a1a1a')),
+            height=500,
+            xaxis_title=top10_metric,
+            yaxis_title="State",
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
+            margin=dict(l=150, r=60, t=60, b=60)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- PAYMENT SUCCESS RATIO ----------------
+st.markdown('<div class="section-header">💳 Payment Performance</div>', unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns(3)
+
+confirmed_orders = filtered[filtered["Status"].str.contains("Confirmed|Delivered|Shipped", case=False, na=False)].shape[0]
+total_attempts = filtered.shape[0]
+success_ratio = (confirmed_orders / total_attempts * 100) if total_attempts > 0 else 0
+
+prepaid_confirmed = filtered[(filtered["Payment Type"] == "Prepaid") & 
+                                (filtered["Status"].str.contains("Confirmed|Delivered|Shipped", case=False, na=False))].shape[0]
+prepaid_total = filtered[filtered["Payment Type"] == "Prepaid"].shape[0]
+prepaid_success = (prepaid_confirmed / prepaid_total * 100) if prepaid_total > 0 else 0
+
+cod_confirmed = filtered[(filtered["Payment Type"] == "COD") & 
+                            (filtered["Status"].str.contains("Confirmed|Delivered|Shipped", case=False, na=False))].shape[0]
+cod_total = filtered[filtered["Payment Type"] == "COD"].shape[0]
+cod_success = (cod_confirmed / cod_total * 100) if cod_total > 0 else 0
+
+with col1:
+    st.markdown(create_metric_card("Overall Success Rate", f"{success_ratio:.1f}%", 
+                                    f"{confirmed_orders:,} / {total_attempts:,} orders"), unsafe_allow_html=True)
+
+with col2:
+    st.markdown(create_metric_card("Prepaid Success Rate", f"{prepaid_success:.1f}%",
+                                    f"{prepaid_confirmed:,} / {prepaid_total:,} orders"), unsafe_allow_html=True)
+
+with col3:
+    st.markdown(create_metric_card("COD Success Rate", f"{cod_success:.1f}%",
+                                    f"{cod_confirmed:,} / {cod_total:,} orders"), unsafe_allow_html=True)
+
+    # ---------------- TIME GRANULARITY ANALYSIS ----------------
+    st.markdown('<div class="section-header">📅 Time-Based Analysis</div>', unsafe_allow_html=True)
+    
+    time_granularity = st.radio(
+        "Select Time Granularity:",
+        ["Daily", "Weekly", "Monthly", "Yearly"],
+        horizontal=True
+    )
+    
+    # Prepare time-based data
+    time_df = filtered.copy()
+    
+    if time_granularity == "Daily":
+        time_df["Period"] = time_df["Order Date"].dt.date
+        title_suffix = "Daily"
+    elif time_granularity == "Weekly":
+        time_df["Period"] = time_df["Order Date"].dt.to_period("W").apply(lambda x: x.start_time)
+        title_suffix = "Weekly"
+    elif time_granularity == "Monthly":
+        time_df["Period"] = time_df["Order Date"].dt.to_period("M").apply(lambda x: x.start_time)
+        title_suffix = "Monthly"
+    else:  # Yearly
+        time_df["Period"] = time_df["Order Date"].dt.to_period("Y").apply(lambda x: x.start_time)
+        title_suffix = "Yearly"
+    
+    time_summary = time_df.groupby("Period").agg({
+        "Order Number": "count",
+        "Grand Total": "sum"
+    }).reset_index()
+    time_summary.columns = ["Period", "Orders", "Revenue"]
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        fig_orders = px.line(time_summary, x="Period", y="Orders",
+                            title=f"{title_suffix} Orders Trend",
+                            markers=True)
+        fig_orders.update_traces(line_color="#667eea", line_width=3)
+        fig_orders.update_layout(
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            height=400
+        )
+        st.plotly_chart(fig_orders, use_container_width=True)
+    
+    with col2:
+        fig_revenue = px.line(time_summary, x="Period", y="Revenue",
+                             title=f"{title_suffix} Revenue Trend",
+                             markers=True)
+        fig_revenue.update_traces(line_color="#10b981", line_width=3)
+        fig_revenue.update_layout(
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
+            height=400
+        )
+        st.plotly_chart(fig_revenue, use_container_width=True)
+    
+    # ---------------- CITY TIER ANALYSIS ----------------
+    st.markdown('<div class="section-header">🏙️ City Tier Analysis</div>', unsafe_allow_html=True)
+    
+    # Define city tiers (you can customize this list)
+    tier1_cities = ["Mumbai", "Delhi", "Bangalore", "Bengaluru", "Hyderabad", "Chennai", "Kolkata", "Pune", "Ahmedabad"]
+    tier2_cities = ["Jaipur", "Lucknow", "Kanpur", "Nagpur", "Indore", "Thane", "Bhopal", "Visakhapatnam", "Pimpri-Chinchwad", 
+                   "Patna", "Vadodara", "Ghaziabad", "Ludhiana", "Agra", "Nashik", "Faridabad", "Meerut", "Rajkot", 
+                   "Kalyan-Dombivali", "Vasai-Virar", "Varanasi", "Srinagar", "Aurangabad", "Dhanbad", "Amritsar"]
+    
+    if "Shipping City" in filtered.columns:
+        city_data = filtered.copy()
+        city_data["City"] = city_data["Shipping City"].str.strip().str.title()
+        
+        def classify_tier(city):
+            if pd.isna(city):
+                return "Unknown"
+            elif city in tier1_cities:
+                return "Tier 1"
+            elif city in tier2_cities:
+                return "Tier 2"
+            else:
+                return "Tier 3"
+        
+        city_data["City Tier"] = city_data["City"].apply(classify_tier)
+        
+        tier_summary = city_data.groupby("City Tier").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        tier_summary.columns = ["Tier", "Orders", "Revenue"]
+        tier_summary["AOV"] = tier_summary["Revenue"] / tier_summary["Orders"]
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            fig_tier_orders = px.pie(tier_summary, values="Orders", names="Tier",
+                                    title="Orders by City Tier",
+                                    color_discrete_sequence=px.colors.qualitative.Set3)
+            fig_tier_orders.update_layout(height=350)
+            st.plotly_chart(fig_tier_orders, use_container_width=True)
+        
+        with col2:
+            fig_tier_revenue = px.pie(tier_summary, values="Revenue", names="Tier",
+                                     title="Revenue by City Tier",
+                                     color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig_tier_revenue.update_layout(height=350)
+            st.plotly_chart(fig_tier_revenue, use_container_width=True)
+        
+        with col3:
+            fig_tier_aov = px.bar(tier_summary, x="Tier", y="AOV",
+                                 title="AOV by City Tier",
+                                 color="AOV",
+                                 color_continuous_scale="Blues")
+            fig_tier_aov.update_layout(height=350, showlegend=False)
+            st.plotly_chart(fig_tier_aov, use_container_width=True)
+        
+        # Detailed tier breakdown
+        st.dataframe(tier_summary.style.format({
+            "Orders": "{:,.0f}",
+            "Revenue": "₹{:,.0f}",
+            "AOV": "₹{:,.0f}"
+        }), use_container_width=True)
+    
+    # ---------------- INDIA MAP VISUALIZATION ----------------
+    st.markdown('<div class="section-header">🗺️ Geographic Distribution</div>', unsafe_allow_html=True)
+    
+    if "Shipping State" in filtered.columns:
+        state_data = filtered.groupby("Shipping State").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        state_data.columns = ["State", "Orders", "Revenue"]
+        state_data = state_data.sort_values("Revenue", ascending=False)
+        
+        # State code mapping for map
+        state_codes = {
+            "Andhra Pradesh": "AP", "Arunachal Pradesh": "AR", "Assam": "AS", "Bihar": "BR",
+            "Chhattisgarh": "CT", "Goa": "GA", "Gujarat": "GJ", "Haryana": "HR", "Himachal Pradesh": "HP",
+            "Jharkhand": "JH", "Karnataka": "KA", "Kerala": "KL", "Madhya Pradesh": "MP", "Maharashtra": "MH",
+            "Manipur": "MN", "Meghalaya": "ML", "Mizoram": "MZ", "Nagaland": "NL", "Odisha": "OR",
+            "Punjab": "PB", "Rajasthan": "RJ", "Sikkim": "SK", "Tamil Nadu": "TN", "Telangana": "TG",
+            "Tripura": "TR", "Uttar Pradesh": "UP", "Uttarakhand": "UT", "West Bengal": "WB",
+            "Delhi": "DL", "Jammu and Kashmir": "JK", "Ladakh": "LA"
+        }
+        
+        state_data["Code"] = state_data["State"].map(state_codes)
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig_map_orders = px.choropleth(
+                state_data,
+                geojson="https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson",
+                featureidkey='properties.ST_NM',
+                locations='State',
+                color='Orders',
+                color_continuous_scale="Blues",
+                title="Orders by State"
+            )
+            fig_map_orders.update_geos(fitbounds="locations", visible=False)
+            fig_map_orders.update_layout(height=500)
+            st.plotly_chart(fig_map_orders, use_container_width=True)
+        
+        with col2:
+            fig_map_revenue = px.choropleth(
+                state_data,
+                geojson="https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson",
+                featureidkey='properties.ST_NM',
+                locations='State',
+                color='Revenue',
+                color_continuous_scale="Greens",
+                title="Revenue by State"
+            )
+            fig_map_revenue.update_geos(fitbounds="locations", visible=False)
+            fig_map_revenue.update_layout(height=500)
+            st.plotly_chart(fig_map_revenue, use_container_width=True)
+    
+    # ---------------- TOP 10 TOGGLE ----------------
+    st.markdown('<div class="section-header">🏆 Top Performers</div>', unsafe_allow_html=True)
+    
+    top_metric = st.radio("View Top 10 by:", ["Orders", "Revenue"], horizontal=True)
+    
+    if "Shipping City" in filtered.columns:
+        if top_metric == "Orders":
+            top_cities = filtered.groupby("Shipping City").agg({
+                "Order Number": "count"
+            }).reset_index()
+            top_cities.columns = ["City", "Orders"]
+            top_cities = top_cities.sort_values("Orders", ascending=False).head(10)
+            
+            fig_top = px.bar(top_cities, x="Orders", y="City", orientation="h",
+                           title="Top 10 Cities by Orders",
+                           color="Orders",
+                           color_continuous_scale="Blues")
+        else:
+            top_cities = filtered.groupby("Shipping City").agg({
+                "Grand Total": "sum"
+            }).reset_index()
+            top_cities.columns = ["City", "Revenue"]
+            top_cities = top_cities.sort_values("Revenue", ascending=False).head(10)
+            
+            fig_top = px.bar(top_cities, x="Revenue", y="City", orientation="h",
+                           title="Top 10 Cities by Revenue",
+                           color="Revenue",
+                           color_continuous_scale="Greens")
+        
+        fig_top.update_layout(height=500, yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(fig_top, use_container_width=True)
+    
+    # ---------------- RFM ANALYSIS ----------------
+    st.markdown('<div class="section-header">👥 RFM Customer Analysis</div>', unsafe_allow_html=True)
+    
+    if "Customer Phone" in filtered.columns or "Shipping Phone" in filtered.columns:
+        import hashlib
+        
+        # Use phone as customer identifier
+        phone_col = "Customer Phone" if "Customer Phone" in filtered.columns else "Shipping Phone"
+        customer_col = "Customer Name" if "Customer Name" in filtered.columns else "Shipping Name"
+        
+        rfm_data = filtered[[phone_col, customer_col, "Order Date", "Grand Total"]].copy()
+        rfm_data.columns = ["Phone", "Name", "OrderDate", "Revenue"]
+        
+        # Hash phone numbers for privacy
+        rfm_data["CustomerID"] = rfm_data["Phone"].apply(
+            lambda x: hashlib.md5(str(x).encode()).hexdigest()[:8] if pd.notna(x) else "Unknown"
+        )
+        
+        # Hash names for privacy
+        rfm_data["HashedName"] = rfm_data["Name"].apply(
+            lambda x: hashlib.md5(str(x).encode()).hexdigest()[:8] if pd.notna(x) else "Unknown"
+        )
+        
+        # Calculate RFM metrics
+        analysis_date = filtered["Order Date"].max()
+        
+        rfm = rfm_data.groupby("CustomerID").agg({
+            "OrderDate": lambda x: (analysis_date - x.max()).days,  # Recency
+            "Phone": "count",  # Frequency
+            "Revenue": "sum",  # Monetary
+            "HashedName": "first"  # Get hashed name
+        }).reset_index()
+        
+        rfm.columns = ["CustomerID", "Recency", "Frequency", "Monetary", "HashedName"]
+        
+        # RFM Scoring (1-5 scale)
+        rfm["R_Score"] = pd.qcut(rfm["Recency"], 5, labels=[5, 4, 3, 2, 1], duplicates='drop')
+        rfm["F_Score"] = pd.qcut(rfm["Frequency"].rank(method="first"), 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
+        rfm["M_Score"] = pd.qcut(rfm["Monetary"], 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
+        
+        rfm["RFM_Score"] = rfm["R_Score"].astype(str) + rfm["F_Score"].astype(str) + rfm["M_Score"].astype(str)
+        
+        # Customer Segments
+        def segment_customer(row):
+            score = int(row["R_Score"]) + int(row["F_Score"]) + int(row["M_Score"])
+            if score >= 13:
+                return "Champions"
+            elif score >= 11:
+                return "Loyal Customers"
+            elif score >= 9:
+                return "Potential Loyalists"
+            elif score >= 7:
+                return "At Risk"
+            else:
+                return "Lost"
+        
+        rfm["Segment"] = rfm.apply(segment_customer, axis=1)
+        
+        # Segment summary
+        segment_summary = rfm.groupby("Segment").agg({
+            "CustomerID": "count",
+            "Monetary": "sum"
+        }).reset_index()
+        segment_summary.columns = ["Segment", "Customers", "Total Revenue"]
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig_segments = px.pie(segment_summary, values="Customers", names="Segment",
+                                title="Customer Segmentation",
+                                color_discrete_sequence=px.colors.qualitative.Set3)
+            fig_segments.update_layout(height=400)
+            st.plotly_chart(fig_segments, use_container_width=True)
+        
+        with col2:
+            fig_segment_revenue = px.bar(segment_summary, x="Segment", y="Total Revenue",
+                                        title="Revenue by Customer Segment",
+                                        color="Total Revenue",
+                                        color_continuous_scale="Viridis")
+            fig_segment_revenue.update_layout(height=400)
+            st.plotly_chart(fig_segment_revenue, use_container_width=True)
+        
+        # Top 15 Customers with hashed names
+        st.markdown("### 🌟 Top 15 Customers (By Revenue)")
+        top_customers = rfm.nlargest(15, "Monetary")[["HashedName", "Recency", "Frequency", "Monetary", "Segment"]]
+        top_customers.columns = ["Customer ID", "Days Since Last Order", "Total Orders", "Total Spent", "Segment"]
+        
+        st.dataframe(top_customers.style.format({
+            "Days Since Last Order": "{:.0f}",
+            "Total Orders": "{:.0f}",
+            "Total Spent": "₹{:,.0f}"
+        }).background_gradient(subset=["Total Spent"], cmap="Greens"), use_container_width=True)
+        
+        # RFM Distribution
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            fig_recency = px.histogram(rfm, x="Recency", nbins=30,
+                                      title="Recency Distribution",
+                                      color_discrete_sequence=["#667eea"])
+            fig_recency.update_layout(height=300)
+            st.plotly_chart(fig_recency, use_container_width=True)
+        
+        with col2:
+            fig_frequency = px.histogram(rfm, x="Frequency", nbins=20,
+                                        title="Frequency Distribution",
+                                        color_discrete_sequence=["#10b981"])
+            fig_frequency.update_layout(height=300)
+            st.plotly_chart(fig_frequency, use_container_width=True)
+        
+        with col3:
+            fig_monetary = px.histogram(rfm, x="Monetary", nbins=30,
+                                       title="Monetary Distribution",
+                                       color_discrete_sequence=["#f59e0b"])
+            fig_monetary.update_layout(height=300)
+            st.plotly_chart(fig_monetary, use_container_width=True)
+            
