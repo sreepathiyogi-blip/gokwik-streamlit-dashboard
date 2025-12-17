@@ -19,33 +19,54 @@ st.markdown("""
 <style>
     /* Main background */
     .main {
-        background: #f5f7fa;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        padding: 20px;
+    }
+    
+    /* Ensure consistent sizing */
+    .block-container {
+        max-width: 100%;
+        padding: 1rem 2rem;
     }
     
     /* Card styling */
     .metric-card {
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-        padding: 20px;
+        padding: 25px;
         border-radius: 15px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
         text-align: center;
         margin: 10px 0;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        height: 100%;
+        min-height: 140px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
     }
     
     /* Metric value */
     .metric-value {
-        font-size: 32px;
+        font-size: 36px;
         font-weight: 700;
-        color: #1a1a1a;
+        color: #667eea;
         margin: 10px 0;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
     }
     
     /* Metric label */
     .metric-label {
-        font-size: 14px;
+        font-size: 13px;
         color: #666;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 1.5px;
+        font-weight: 600;
+        margin-bottom: 8px;
     }
     
     /* Header styling */
@@ -61,15 +82,24 @@ st.markdown("""
     
     /* Section headers */
     .section-header {
-        font-size: 20px;
-        font-weight: 600;
+        font-size: 22px;
+        font-weight: 700;
         color: #1a1a1a;
-        margin: 25px 0 15px 0;
-        padding-left: 10px;
-        border-left: 4px solid #667eea;
+        margin: 35px 0 20px 0;
+        padding: 18px 20px;
+        border-left: 5px solid #667eea;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+    
+    /* Chart containers */
+    .js-plotly-plot {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
         background: white;
-        padding: 15px;
-        border-radius: 8px;
+        margin: 10px 0;
     }
     
     /* Remove streamlit branding */
@@ -86,10 +116,52 @@ st.markdown("""
     /* Sidebar styling */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
     }
     
     [data-testid="stSidebar"] * {
         color: white !important;
+    }
+    
+    /* Streamlit elements */
+    .stButton>button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Dataframe styling */
+    .dataframe {
+        border-radius: 10px !important;
+        overflow: hidden !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .metric-card {
+            padding: 15px;
+            min-height: 120px;
+        }
+        
+        .metric-value {
+            font-size: 28px;
+        }
+        
+        .section-header {
+            font-size: 18px;
+            padding: 12px 15px;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -113,12 +185,12 @@ def read_file(file):
     return pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
 
 def create_metric_card(label, value, delta=None, delta_color="normal"):
-    delta_html = f'<div style="color: {"green" if delta_color == "normal" else "red"}; font-size: 14px;">{delta}</div>' if delta else ""
+    delta_html = f'<div style="color: {"#10b981" if delta_color == "normal" else "#ef4444"}; font-size: 14px; font-weight: 600; margin-top: 8px;">{delta}</div>' if delta else ""
     
     return f"""
     <div class="metric-card">
-        <div class="metric-label" style="color: #666; font-weight: 600;">{label}</div>
-        <div class="metric-value" style="color: #1a1a1a; font-weight: 700;">{value}</div>
+        <div class="metric-label">{label}</div>
+        <div class="metric-value">{value}</div>
         {delta_html}
     </div>
     """
@@ -336,18 +408,18 @@ with col1:
     )
     
     fig.update_layout(
-        title="Daily Revenue & Orders",
-        height=350,
+        title=dict(text="Daily Revenue & Orders", font=dict(size=16, color='#1a1a1a', family="Arial, sans-serif")),
+        height=400,
         hovermode='x unified',
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
-        margin=dict(l=50, r=50, t=50, b=50)
+        margin=dict(l=60, r=60, t=60, b=60)
     )
     
-    fig.update_xaxes(showgrid=True, gridcolor='#f0f0f0')
-    fig.update_yaxes(showgrid=True, gridcolor='#f0f0f0', secondary_y=False)
-    fig.update_yaxes(showgrid=False, secondary_y=True)
+    fig.update_xaxes(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
+    fig.update_yaxes(showgrid=True, gridcolor='#f0f0f0', secondary_y=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
+    fig.update_yaxes(showgrid=False, secondary_y=True, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
     
     st.plotly_chart(fig, use_container_width=True)
 
@@ -370,12 +442,12 @@ with col2:
     )])
     
     fig.update_layout(
-        title="Payment Split",
-        height=350,
+        title=dict(text="Payment Split", font=dict(size=16, color='#1a1a1a', family="Arial, sans-serif")),
+        height=400,
         showlegend=False,
         paper_bgcolor='white',
         font=dict(family="Arial, sans-serif", size=14, color='#1a1a1a'),
-        margin=dict(l=50, r=50, t=50, b=50)
+        margin=dict(l=20, r=20, t=60, b=20)
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -409,14 +481,14 @@ with col1:
         ))
         
         fig.update_layout(
-            title="Top 10 States by Orders",
-            height=350,
+            title=dict(text="Top 10 States by Orders", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-            yaxis=dict(showgrid=False),
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=50)
+            margin=dict(l=60, r=60, t=60, b=60)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -434,11 +506,11 @@ with col2:
     ))
     
     fig.update_layout(
-        title="Order Status Funnel",
-        height=350,
+        title=dict(text="Order Status Funnel", font=dict(size=16, color='#1a1a1a')),
+        height=400,
         paper_bgcolor='white',
         font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
-        margin=dict(l=50, r=50, t=50, b=50)
+        margin=dict(l=60, r=60, t=60, b=60)
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -482,17 +554,17 @@ with col1:
         ))
         
         fig.update_layout(
-            title="UTM Source Performance: Orders & AOV",
-            height=350,
+            title=dict(text="UTM Source Performance: Orders & AOV", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=False, title="Source"),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
-            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="AOV (₹)"),
+            xaxis=dict(showgrid=False, title="Source", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="AOV (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=50),
+            margin=dict(l=60, r=60, t=60, b=60),
             showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -521,14 +593,14 @@ with col2:
         ))
         
         fig.update_layout(
-            title="Top 10 Campaigns by Revenue",
-            height=350,
+            title=dict(text="Top 10 Campaigns by Revenue", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Revenue (₹)"),
-            yaxis=dict(showgrid=False, title=""),
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Revenue (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=False, title="", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=50)
+            margin=dict(l=60, r=60, t=60, b=60)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -564,17 +636,17 @@ with col1:
             ))
         
         fig.update_layout(
-            title="UTM Source: COD vs Prepaid Orders (Top 10)",
-            height=350,
+            title=dict(text="UTM Source: COD vs Prepaid Orders (Top 10)", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
             barmode='group',
-            xaxis=dict(showgrid=False, tickangle=-45, title="UTM Source"),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
+            xaxis=dict(showgrid=False, tickangle=-45, title="UTM Source", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=100),
+            margin=dict(l=60, r=60, t=60, b=100),
             showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -609,14 +681,14 @@ with col2:
                      annotation_text="50% threshold", annotation_position="right")
         
         fig.update_layout(
-            title="Prepaid % by UTM Source (Top 10)",
-            height=350,
+            title=dict(text="Prepaid % by UTM Source (Top 10)", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=False, tickangle=-45, title="UTM Source"),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Prepaid %", range=[0, 105]),
+            xaxis=dict(showgrid=False, tickangle=-45, title="UTM Source", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Prepaid %", range=[0, 105], tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=100)
+            margin=dict(l=60, r=60, t=60, b=100)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -652,14 +724,14 @@ with col1:
         ])
         
         fig.update_layout(
-            title="Top 10 Products by Orders",
-            height=350,
+            title=dict(text="Top 10 Products by Orders", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=False, tickangle=-45),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+            xaxis=dict(showgrid=False, tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=80)
+            margin=dict(l=60, r=60, t=60, b=100)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -686,17 +758,17 @@ with col2:
             ))
         
         fig.update_layout(
-            title="Product-wise Payment Split (Top 8)",
-            height=350,
+            title=dict(text="Product-wise Payment Split (Top 8)", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
             barmode='stack',
-            xaxis=dict(showgrid=False, tickangle=-45),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
+            xaxis=dict(showgrid=False, tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=80),
+            margin=dict(l=60, r=60, t=60, b=100),
             showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -724,12 +796,14 @@ with col1:
         ])
         
         fig.update_layout(
-            title="RTO Risk Distribution",
-            height=280,
+            title=dict(text="RTO Risk Distribution", font=dict(size=15, color='#1a1a1a')),
+            height=320,
             plot_bgcolor='white',
             paper_bgcolor='white',
+            xaxis=dict(tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=40, r=40, t=40, b=40)
+            margin=dict(l=50, r=50, t=50, b=50)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -746,14 +820,14 @@ with col2:
         )])
         
         fig.update_layout(
-            title="RTO Score Distribution",
-            height=280,
+            title=dict(text="RTO Score Distribution", font=dict(size=15, color='#1a1a1a')),
+            height=320,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis_title="RTO Score",
-            yaxis_title="Count",
+            xaxis=dict(title="RTO Score", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(title="Count", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=40, r=40, t=40, b=40)
+            margin=dict(l=50, r=50, t=50, b=50)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -809,14 +883,14 @@ with col1:
     ))
     
     fig.update_layout(
-        title="Orders by Day of Week",
-        height=300,
+        title=dict(text="Orders by Day of Week", font=dict(size=15, color='#1a1a1a')),
+        height=350,
         plot_bgcolor='white',
         paper_bgcolor='white',
-        xaxis=dict(showgrid=False, tickangle=-45),
-        yaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+        xaxis=dict(showgrid=False, tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+        yaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
         font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
-        margin=dict(l=40, r=40, t=40, b=80)
+        margin=dict(l=50, r=50, t=50, b=80)
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -841,14 +915,14 @@ with col2:
     ))
     
     fig.update_layout(
-        title="Orders by Hour of Day",
-        height=300,
+        title=dict(text="Orders by Hour of Day", font=dict(size=15, color='#1a1a1a')),
+        height=350,
         plot_bgcolor='white',
         paper_bgcolor='white',
-        xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Hour", dtick=2),
-        yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
+        xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Hour", dtick=2, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+        yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
         font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
-        margin=dict(l=40, r=40, t=40, b=40)
+        margin=dict(l=50, r=50, t=50, b=50)
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -877,14 +951,14 @@ with col3:
     ))
     
     fig.update_layout(
-        title="Weekly Average Order Value",
-        height=300,
+        title=dict(text="Weekly Average Order Value", font=dict(size=15, color='#1a1a1a')),
+        height=350,
         plot_bgcolor='white',
         paper_bgcolor='white',
-        xaxis=dict(showgrid=False, tickangle=-45, title="Week"),
-        yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="AOV (₹)"),
+        xaxis=dict(showgrid=False, tickangle=-45, title="Week", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+        yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="AOV (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
         font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
-        margin=dict(l=40, r=40, t=40, b=80)
+        margin=dict(l=50, r=50, t=50, b=80)
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -969,17 +1043,17 @@ with col1:
         ))
         
         fig.update_layout(
-            title="Top 15 Customers by Lifetime Value",
-            height=350,
+            title=dict(text="Top 15 Customers by Lifetime Value", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=False, tickangle=-45, title="Customer"),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)"),
-            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="Total Orders"),
+            xaxis=dict(showgrid=False, tickangle=-45, title="Customer", tickfont=dict(color='#1a1a1a', size=9), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="Total Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=120),
+            margin=dict(l=60, r=60, t=60, b=120),
             showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -1059,14 +1133,14 @@ with col1:
         ))
         
         fig.update_layout(
-            title="Customer Distribution by Order Count",
-            height=350,
+            title=dict(text="Customer Distribution by Order Count", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=False, title="Number of Orders", dtick=1),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Number of Customers"),
+            xaxis=dict(showgrid=False, title="Number of Orders", dtick=1, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Number of Customers", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=50)
+            margin=dict(l=60, r=60, t=60, b=60)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -1095,14 +1169,14 @@ with col2:
         ))
         
         fig.update_layout(
-            title="Customer Lifetime vs Revenue (bubble = order count)",
-            height=350,
+            title=dict(text="Customer Lifetime vs Revenue (bubble = order count)", font=dict(size=16, color='#1a1a1a')),
+            height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Customer Lifetime (Days)"),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)"),
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Customer Lifetime (Days)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=50, r=50, t=50, b=50)
+            margin=dict(l=60, r=60, t=60, b=60)
         )
         
         st.plotly_chart(fig, use_container_width=True)
