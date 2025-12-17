@@ -19,7 +19,7 @@ st.markdown("""
 <style>
     /* Main background */
     .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #f5f7fa;
     }
     
     /* Card styling */
@@ -67,6 +67,9 @@ st.markdown("""
         margin: 25px 0 15px 0;
         padding-left: 10px;
         border-left: 4px solid #667eea;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
     }
     
     /* Remove streamlit branding */
@@ -176,7 +179,6 @@ if uploaded_file:
     save_data(df)
     with st.sidebar:
         st.success("✅ File uploaded successfully")
-    # Don't stop here, continue to show dashboard
 
 # ---------------- LOAD DATA ----------------
 if not uploaded_file:
@@ -184,9 +186,6 @@ if not uploaded_file:
     if df is None:
         st.info("👆 Please upload a file to view the dashboard")
         st.stop()
-else:
-    # Use the df we just processed
-    pass
 
 if "Order Date" not in df.columns:
     st.error("⚠️ Data corrupted. Please re-upload the file.")
@@ -243,7 +242,7 @@ with st.sidebar:
     # Campaign filter
     if "Utm Campaign" in df.columns:
         campaigns = df["Utm Campaign"].dropna().unique().tolist()
-        if campaigns and len(campaigns) < 50:  # Only show if reasonable number
+        if campaigns and len(campaigns) < 50:
             campaign_filter = st.multiselect(
                 "Campaign",
                 campaigns,
@@ -534,6 +533,94 @@ with col2:
         
         st.plotly_chart(fig, use_container_width=True)
 
+# ---------------- ROW 3.5: UTM PAYMENT TYPE ANALYSIS ----------------
+st.markdown('<div class="section-header">💳 UTM Source - Payment Type Analysis</div>', unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # UTM Source wise COD vs Prepaid
+    if "Utm Source" in filtered.columns:
+        utm_payment = filtered.groupby(["Utm Source", "Payment Type"]).agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        
+        # Get top 10 sources by total orders
+        top_sources = filtered.groupby("Utm Source")["Order Number"].count().nlargest(10).index.tolist()
+        utm_payment = utm_payment[utm_payment["Utm Source"].isin(top_sources)]
+        
+        fig = go.Figure()
+        
+        for payment_type in ["Prepaid", "COD"]:
+            data = utm_payment[utm_payment["Payment Type"] == payment_type]
+            fig.add_trace(go.Bar(
+                name=payment_type,
+                x=data["Utm Source"],
+                y=data["Order Number"],
+                marker=dict(color='#4facfe' if payment_type == "Prepaid" else '#f093fb'),
+                text=data["Order Number"],
+                textposition='outside'
+            ))
+        
+        fig.update_layout(
+            title="UTM Source: COD vs Prepaid Orders (Top 10)",
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            barmode='group',
+            xaxis=dict(showgrid=False, tickangle=-45, title="UTM Source"),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=50, r=50, t=50, b=100),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # Prepaid % by UTM Source
+    if "Utm Source" in filtered.columns:
+        utm_prepaid = filtered.groupby(["Utm Source", "Payment Type"]).size().unstack(fill_value=0)
+        utm_prepaid["Total"] = utm_prepaid.sum(axis=1)
+        utm_prepaid["Prepaid %"] = (utm_prepaid.get("Prepaid", 0) / utm_prepaid["Total"] * 100)
+        utm_prepaid = utm_prepaid.sort_values("Total", ascending=False).head(10).reset_index()
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=utm_prepaid["Utm Source"],
+            y=utm_prepaid["Prepaid %"],
+            marker=dict(
+                color=utm_prepaid["Prepaid %"],
+                colorscale='RdYlGn',
+                showscale=True,
+                colorbar=dict(title="Prepaid %"),
+                cmin=0,
+                cmax=100
+            ),
+            text=[f"{x:.1f}%" for x in utm_prepaid["Prepaid %"]],
+            textposition='outside'
+        ))
+        
+        # Add reference line at 50%
+        fig.add_hline(y=50, line_dash="dash", line_color="gray", 
+                     annotation_text="50% threshold", annotation_position="right")
+        
+        fig.update_layout(
+            title="Prepaid % by UTM Source (Top 10)",
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, tickangle=-45, title="UTM Source"),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Prepaid %", range=[0, 105]),
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=50, r=50, t=50, b=100)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
 # ---------------- ROW 4: PRODUCTS & PAYMENT MIX ----------------
 st.markdown('<div class="section-header">🛍️ Product Analysis</div>', unsafe_allow_html=True)
 
@@ -692,6 +779,333 @@ with col3:
             <div class="metric-value">{avg_rto_score:.2f}</div>
         </div>
         """, unsafe_allow_html=True)
+
+# ---------------- ROW 6: TIME-BASED ANALYSIS ----------------
+st.markdown('<div class="section-header">⏰ Time-Based Performance</div>', unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    # Day of week analysis
+    filtered["Day of Week"] = filtered["Order Date"].dt.day_name()
+    day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    
+    dow_data = filtered.groupby("Day of Week").agg({
+        "Order Number": "count",
+        "Grand Total": "sum"
+    }).reindex(day_order).reset_index()
+    dow_data.columns = ["Day", "Orders", "Revenue"]
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        x=dow_data["Day"],
+        y=dow_data["Orders"],
+        marker=dict(
+            color=['#667eea', '#764ba2', '#f093fb', '#fa709a', '#fee140', '#30cfd0', '#43e97b']
+        ),
+        text=dow_data["Orders"],
+        textposition='outside'
+    ))
+    
+    fig.update_layout(
+        title="Orders by Day of Week",
+        height=300,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis=dict(showgrid=False, tickangle=-45),
+        yaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
+        font=dict(family="Arial, sans-serif", size=10),
+        margin=dict(l=40, r=40, t=40, b=80)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # Hour of day analysis
+    filtered["Hour"] = filtered["Order Date"].dt.hour
+    
+    hour_data = filtered.groupby("Hour")["Order Number"].count().reset_index()
+    hour_data.columns = ["Hour", "Orders"]
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=hour_data["Hour"],
+        y=hour_data["Orders"],
+        mode='lines+markers',
+        line=dict(color='#667eea', width=3),
+        marker=dict(size=8, color='#764ba2'),
+        fill='tozeroy',
+        fillcolor='rgba(102, 126, 234, 0.2)'
+    ))
+    
+    fig.update_layout(
+        title="Orders by Hour of Day",
+        height=300,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Hour", dtick=2),
+        yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
+        font=dict(family="Arial, sans-serif", size=10),
+        margin=dict(l=40, r=40, t=40, b=40)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+with col3:
+    # Weekly trend
+    filtered["Week"] = filtered["Order Date"].dt.to_period('W').astype(str)
+    
+    weekly_data = filtered.groupby("Week").agg({
+        "Order Number": "count",
+        "Grand Total": "sum"
+    }).reset_index()
+    weekly_data.columns = ["Week", "Orders", "Revenue"]
+    weekly_data["AOV"] = weekly_data["Revenue"] / weekly_data["Orders"]
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        x=weekly_data["Week"],
+        y=weekly_data["AOV"],
+        mode='lines+markers',
+        line=dict(color='#f093fb', width=3),
+        marker=dict(size=8, color='#fa709a'),
+        fill='tozeroy',
+        fillcolor='rgba(240, 147, 251, 0.2)'
+    ))
+    
+    fig.update_layout(
+        title="Weekly Average Order Value",
+        height=300,
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis=dict(showgrid=False, tickangle=-45, title="Week"),
+        yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="AOV (₹)"),
+        font=dict(family="Arial, sans-serif", size=10),
+        margin=dict(l=40, r=40, t=40, b=80)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- ROW 7: CUSTOMER INSIGHTS & LIFETIME VALUE ----------------
+st.markdown('<div class="section-header">👥 Customer Insights & Lifetime Value</div>', unsafe_allow_html=True)
+
+# Calculate Customer Lifetime Value metrics
+if "Customer Name" in filtered.columns:
+    clv_data = df.groupby("Customer Name").agg({
+        "Order Number": "count",
+        "Grand Total": "sum",
+        "Order Date": ["min", "max"]
+    }).reset_index()
+    
+    clv_data.columns = ["Customer", "Total Orders", "Total Revenue", "First Order", "Last Order"]
+    clv_data["Customer Lifetime (Days)"] = (clv_data["Last Order"] - clv_data["First Order"]).dt.days
+    clv_data["Avg Order Value"] = clv_data["Total Revenue"] / clv_data["Total Orders"]
+    
+    # Calculate repeat customer rate
+    repeat_customers = clv_data[clv_data["Total Orders"] > 1].shape[0]
+    total_customers = clv_data.shape[0]
+    repeat_rate = (repeat_customers / total_customers * 100) if total_customers > 0 else 0
+    
+    # CLV KPIs
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown(create_metric_card(
+            "Total Customers", 
+            f"{total_customers:,}"
+        ), unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(create_metric_card(
+            "Repeat Customers", 
+            f"{repeat_customers:,}",
+            f"{repeat_rate:.1f}%"
+        ), unsafe_allow_html=True)
+    
+    with col3:
+        avg_clv = clv_data["Total Revenue"].mean()
+        st.markdown(create_metric_card(
+            "Avg Customer LTV", 
+            f"₹{avg_clv:,.0f}"
+        ), unsafe_allow_html=True)
+    
+    with col4:
+        avg_orders_per_customer = clv_data["Total Orders"].mean()
+        st.markdown(create_metric_card(
+            "Avg Orders/Customer", 
+            f"{avg_orders_per_customer:.2f}"
+        ), unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # Top customers by CLV
+    if "Customer Name" in filtered.columns:
+        top_clv = clv_data.sort_values("Total Revenue", ascending=False).head(15)
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=top_clv["Customer"],
+            y=top_clv["Total Revenue"],
+            name="Total Revenue",
+            marker=dict(color='#667eea'),
+            text=[f"₹{x:,.0f}" for x in top_clv["Total Revenue"]],
+            textposition='outside',
+            yaxis='y'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=top_clv["Customer"],
+            y=top_clv["Total Orders"],
+            name="Orders",
+            mode='lines+markers',
+            marker=dict(color='#f093fb', size=10),
+            line=dict(color='#f093fb', width=3),
+            yaxis='y2'
+        ))
+        
+        fig.update_layout(
+            title="Top 15 Customers by Lifetime Value",
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, tickangle=-45, title="Customer"),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)"),
+            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="Total Orders"),
+            font=dict(family="Arial, sans-serif", size=10),
+            margin=dict(l=50, r=50, t=50, b=120),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # Customer segmentation by order frequency
+    if "Customer Name" in filtered.columns:
+        clv_data["Segment"] = pd.cut(
+            clv_data["Total Orders"], 
+            bins=[0, 1, 3, 5, float('inf')],
+            labels=["One-time", "Occasional (2-3)", "Regular (4-5)", "Loyal (6+)"]
+        )
+        
+        segment_data = clv_data.groupby("Segment").agg({
+            "Customer": "count",
+            "Total Revenue": "sum"
+        }).reset_index()
+        segment_data.columns = ["Segment", "Customers", "Revenue"]
+        
+        fig = make_subplots(
+            rows=1, cols=2,
+            specs=[[{"type": "domain"}, {"type": "domain"}]],
+            subplot_titles=("By Customer Count", "By Revenue")
+        )
+        
+        fig.add_trace(go.Pie(
+            labels=segment_data["Segment"],
+            values=segment_data["Customers"],
+            hole=0.4,
+            marker=dict(colors=['#fa709a', '#fee140', '#30cfd0', '#43e97b']),
+            textinfo='label+percent',
+            textfont_size=11
+        ), 1, 1)
+        
+        fig.add_trace(go.Pie(
+            labels=segment_data["Segment"],
+            values=segment_data["Revenue"],
+            hole=0.4,
+            marker=dict(colors=['#fa709a', '#fee140', '#30cfd0', '#43e97b']),
+            textinfo='label+percent',
+            textfont_size=11
+        ), 1, 2)
+        
+        fig.update_layout(
+            title_text="Customer Segmentation",
+            height=350,
+            showlegend=False,
+            paper_bgcolor='white',
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+# Cohort analysis
+col1, col2 = st.columns(2)
+
+with col1:
+    # Order frequency distribution
+    if "Customer Name" in filtered.columns:
+        order_freq = clv_data["Total Orders"].value_counts().sort_index().reset_index()
+        order_freq.columns = ["Orders", "Customers"]
+        order_freq = order_freq[order_freq["Orders"] <= 10]  # Limit to 10 orders for clarity
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=order_freq["Orders"],
+            y=order_freq["Customers"],
+            marker=dict(
+                color=order_freq["Customers"],
+                colorscale='Viridis',
+                showscale=False
+            ),
+            text=order_freq["Customers"],
+            textposition='outside'
+        ))
+        
+        fig.update_layout(
+            title="Customer Distribution by Order Count",
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, title="Number of Orders", dtick=1),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Number of Customers"),
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # Customer lifetime duration vs revenue
+    if "Customer Name" in filtered.columns:
+        active_clv = clv_data[clv_data["Customer Lifetime (Days)"] > 0]
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=active_clv["Customer Lifetime (Days)"],
+            y=active_clv["Total Revenue"],
+            mode='markers',
+            marker=dict(
+                size=active_clv["Total Orders"] * 3,
+                color=active_clv["Total Orders"],
+                colorscale='Plasma',
+                showscale=True,
+                colorbar=dict(title="Orders"),
+                line=dict(color='white', width=0.5)
+            ),
+            text=active_clv["Customer"],
+            hovertemplate='<b>%{text}</b><br>Lifetime: %{x} days<br>Revenue: ₹%{y:,.0f}<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            title="Customer Lifetime vs Revenue (bubble = order count)",
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Customer Lifetime (Days)"),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)"),
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- DATA TABLE ----------------
 st.markdown('<div class="section-header">📋 Detailed Order Data</div>', unsafe_allow_html=True)
