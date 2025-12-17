@@ -341,7 +341,7 @@ with col1:
         hovermode='x unified',
         plot_bgcolor='white',
         paper_bgcolor='white',
-        font=dict(family="Arial, sans-serif", size=12),
+        font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
         margin=dict(l=50, r=50, t=50, b=50)
     )
     
@@ -374,7 +374,7 @@ with col2:
         height=350,
         showlegend=False,
         paper_bgcolor='white',
-        font=dict(family="Arial, sans-serif", size=14),
+        font=dict(family="Arial, sans-serif", size=14, color='#1a1a1a'),
         margin=dict(l=50, r=50, t=50, b=50)
     )
     
@@ -415,7 +415,7 @@ with col1:
             paper_bgcolor='white',
             xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
             yaxis=dict(showgrid=False),
-            font=dict(family="Arial, sans-serif", size=12),
+            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=50)
         )
         
@@ -437,7 +437,7 @@ with col2:
         title="Order Status Funnel",
         height=350,
         paper_bgcolor='white',
-        font=dict(family="Arial, sans-serif", size=12),
+        font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
         margin=dict(l=50, r=50, t=50, b=50)
     )
     
@@ -489,7 +489,7 @@ with col1:
             xaxis=dict(showgrid=False, title="Source"),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
             yaxis2=dict(showgrid=False, overlaying='y', side='right', title="AOV (₹)"),
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=50),
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
@@ -527,7 +527,7 @@ with col2:
             paper_bgcolor='white',
             xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Revenue (₹)"),
             yaxis=dict(showgrid=False, title=""),
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=50)
         )
         
@@ -571,7 +571,7 @@ with col1:
             barmode='group',
             xaxis=dict(showgrid=False, tickangle=-45, title="UTM Source"),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=100),
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
@@ -615,7 +615,7 @@ with col2:
             paper_bgcolor='white',
             xaxis=dict(showgrid=False, tickangle=-45, title="UTM Source"),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Prepaid %", range=[0, 105]),
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=100)
         )
         
@@ -658,7 +658,7 @@ with col1:
             paper_bgcolor='white',
             xaxis=dict(showgrid=False, tickangle=-45),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-            font=dict(family="Arial, sans-serif", size=12),
+            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=80)
         )
         
@@ -693,7 +693,7 @@ with col2:
             barmode='stack',
             xaxis=dict(showgrid=False, tickangle=-45),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=80),
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
@@ -728,7 +728,7 @@ with col1:
             height=280,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=40, r=40, t=40, b=40)
         )
         
@@ -752,7 +752,7 @@ with col2:
             paper_bgcolor='white',
             xaxis_title="RTO Score",
             yaxis_title="Count",
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=40, r=40, t=40, b=40)
         )
         
@@ -815,7 +815,7 @@ with col1:
         paper_bgcolor='white',
         xaxis=dict(showgrid=False, tickangle=-45),
         yaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-        font=dict(family="Arial, sans-serif", size=10),
+        font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
         margin=dict(l=40, r=40, t=40, b=80)
     )
     
@@ -847,7 +847,7 @@ with col2:
         paper_bgcolor='white',
         xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Hour", dtick=2),
         yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
-        font=dict(family="Arial, sans-serif", size=10),
+        font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
         margin=dict(l=40, r=40, t=40, b=40)
     )
     
@@ -883,7 +883,7 @@ with col3:
         paper_bgcolor='white',
         xaxis=dict(showgrid=False, tickangle=-45, title="Week"),
         yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="AOV (₹)"),
-        font=dict(family="Arial, sans-serif", size=10),
+        font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
         margin=dict(l=40, r=40, t=40, b=80)
     )
     
@@ -976,7 +976,7 @@ with col1:
             xaxis=dict(showgrid=False, tickangle=-45, title="Customer"),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)"),
             yaxis2=dict(showgrid=False, overlaying='y', side='right', title="Total Orders"),
-            font=dict(family="Arial, sans-serif", size=10),
+            font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=120),
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
@@ -1028,7 +1028,7 @@ with col2:
             height=350,
             showlegend=False,
             paper_bgcolor='white',
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=20, r=20, t=60, b=20)
         )
         
@@ -1065,7 +1065,7 @@ with col1:
             paper_bgcolor='white',
             xaxis=dict(showgrid=False, title="Number of Orders", dtick=1),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Number of Customers"),
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=50)
         )
         
@@ -1101,7 +1101,7 @@ with col2:
             paper_bgcolor='white',
             xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Customer Lifetime (Days)"),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)"),
-            font=dict(family="Arial, sans-serif", size=11),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
             margin=dict(l=50, r=50, t=50, b=50)
         )
         
