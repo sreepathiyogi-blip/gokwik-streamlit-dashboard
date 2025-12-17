@@ -1018,14 +1018,30 @@ if "Customer Phone" in filtered.columns or "Shipping Phone" in filtered.columns:
             })
         
         st.markdown("### 🌟 Top 15 Customers (By Revenue)")
-        top_customers = rfm.nlargest(15, "Monetary")[["HashedName", "Recency", "Frequency", "Monetary", "Segment"]]
+        top_customers = rfm.nlargest(15, "Monetary")[["HashedName", "Recency", "Frequency", "Monetary", "Segment"]].copy()
         top_customers.columns = ["Customer ID", "Days Since Last Order", "Total Orders", "Total Spent", "Segment"]
         
-        st.dataframe(top_customers.style.format({
-            "Days Since Last Order": "{:.0f}",
-            "Total Orders": "{:.0f}",
-            "Total Spent": "₹{:,.0f}"
-        }).background_gradient(subset=["Total Spent"], cmap="Greens"), use_container_width=True)
+        # Reset index to show row numbers
+        top_customers = top_customers.reset_index(drop=True)
+        top_customers.index = top_customers.index + 1
+        
+        # Format the dataframe columns
+        top_customers["Days Since Last Order"] = top_customers["Days Since Last Order"].astype(int)
+        top_customers["Total Orders"] = top_customers["Total Orders"].astype(int)
+        top_customers["Total Spent"] = top_customers["Total Spent"].apply(lambda x: f"₹{x:,.0f}")
+        
+        # Display with column configuration for better formatting
+        st.dataframe(
+            top_customers,
+            use_container_width=True,
+            column_config={
+                "Customer ID": st.column_config.TextColumn("Customer ID", width="medium"),
+                "Days Since Last Order": st.column_config.NumberColumn("Days Since Last Order", format="%d"),
+                "Total Orders": st.column_config.NumberColumn("Total Orders", format="%d"),
+                "Total Spent": st.column_config.TextColumn("Total Spent"),
+                "Segment": st.column_config.TextColumn("Segment", width="medium")
+            }
+        )
         
         col1, col2, col3 = st.columns(3)
         
