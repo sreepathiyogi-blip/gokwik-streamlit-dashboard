@@ -277,37 +277,49 @@ def get_city_tier(state):
     else:
         return 'Tier 3'
 
-def safe_binning(series, n_bins=5, labels=None, reverse=False):
-    """Safely bin data with improved error handling"""
-    if labels is None:
-        labels = list(range(1, n_bins + 1))
-    if reverse:
-        labels = labels[::-1]
-    
-    # Remove NaN values before binning
+def rfm_score(series, n_bins=5, reverse=False):
+    """Create RFM scores with proper error handling for qcut label mismatch"""
     clean_series = series.dropna()
+    
     if len(clean_series) == 0:
-        return pd.Series([labels[n_bins//2]] * len(series), index=series.index)
+        return pd.Series([3] * len(series), index=series.index)
+    
+    # If we have very few unique values, reduce bins
+    unique_count = clean_series.nunique()
+    actual_bins = min(n_bins, unique_count)
+    
+    if actual_bins < 2:
+        # Not enough variation, give everyone same score
+        return pd.Series([3] * len(series), index=series.index)
     
     try:
-        # Try quantile-based binning first
-        result = pd.qcut(clean_series, n_bins, labels=False, duplicates='drop')
-        unique_bins = int(result.nunique())
-        # Adjust labels to match actual number of bins created
-        if unique_bins < n_bins:
-            adjusted_labels = labels[:unique_bins]
-        else:
-            adjusted_labels = labels
+        # Use qcut with duplicates='drop'
+        binned = pd.qcut(clean_series, actual_bins, labels=False, duplicates='drop')
+        unique_bins = int(binned.nunique())
         
-        binned = pd.qcut(clean_series, n_bins, labels=adjusted_labels, duplicates='drop')
-        return binned.reindex(series.index, fill_value=adjusted_labels[0])
-    except (ValueError, TypeError):
-        # Fallback to equal-width binning
+        # Create labels that match actual number of bins
+        if reverse:
+            actual_labels = list(range(unique_bins, 0, -1))
+        else:
+            actual_labels = list(range(1, unique_bins + 1))
+        
+        # Re-bin with proper labels
+        result = pd.qcut(clean_series, actual_bins, labels=actual_labels, duplicates='drop')
+        return result.reindex(series.index, fill_value=actual_labels[len(actual_labels)//2])
+        
+    except Exception:
+        # Fallback to cut
         try:
-            binned = pd.cut(clean_series, bins=n_bins, labels=labels[:n_bins])
-            return binned.reindex(series.index, fill_value=labels[n_bins//2])
-        except (ValueError, TypeError):
-            return pd.Series([labels[n_bins//2]] * len(series), index=series.index)
+            if reverse:
+                labels = list(range(actual_bins, 0, -1))
+            else:
+                labels = list(range(1, actual_bins + 1))
+            
+            result = pd.cut(clean_series, bins=actual_bins, labels=labels, duplicates='drop')
+            return result.reindex(series.index, fill_value=labels[len(labels)//2])
+        except:
+            # Last resort - give everyone middle score
+            return pd.Series([3] * len(series), index=series.index)
 
 # ---------------- HEADER ----------------
 st.markdown("""
@@ -897,8 +909,20 @@ if "Customer Phone" in filtered.columns or "Shipping Phone" in filtered.columns:
         phone_col = "Customer Phone" if "Customer Phone" in filtered.columns else "Shipping Phone"
         customer_col = "Customer Name" if "Customer Name" in filtered.columns else "Shipping Name"
         
+        # Validate required columns exist
+        if phone_col not in filtered.columns or customer_col not in filtered.columns:
+            st.warning("⚠️ Required customer fields are missing for RFM analysis")
+            st.stop()
+        
         rfm_data = filtered[[phone_col, customer_col, "Order Date", "Grand Total"]].copy()
         rfm_data.columns = ["Phone", "Name", "OrderDate", "Revenue"]
+        
+        # Remove rows with missing critical data
+        rfm_data = rfm_data.dropna(subset=["Phone", "OrderDate", "Revenue"])
+        
+        if len(rfm_data) == 0:
+            st.warning("⚠️ No valid customer data available for RFM analysis")
+            st.stop()
         
         rfm_data["CustomerID"] = rfm_data["Phone"].apply(
             lambda x: hashlib.md5(str(x).encode()).hexdigest()[:8] if pd.notna(x) else "Unknown"
@@ -919,16 +943,27 @@ if "Customer Phone" in filtered.columns or "Shipping Phone" in filtered.columns:
         
         rfm.columns = ["CustomerID", "Recency", "Frequency", "Monetary", "HashedName"]
         
-        # Safe RFM Scoring with improved fallback
-        rfm["R_Score"] = safe_binning(rfm["Recency"], n_bins=5, labels=[5, 4, 3, 2, 1])
-        rfm["F_Score"] = safe_binning(rfm["Frequency"].rank(method="first"), n_bins=5, labels=[1, 2, 3, 4, 5])
-        rfm["M_Score"] = safe_binning(rfm["Monetary"], n_bins=5, labels=[1, 2, 3, 4, 5])
+        # Calculate RFM Scores with improved binning
+        rfm["R_Score"] = rfm_score(rfm["Recency"], n_bins=5, reverse=True)
+        rfm["F_Score"] = rfm_score(rfm["Frequency"], n_bins=5, reverse=False)
+        rfm["M_Score"] = rfm_score(rfm["Monetary"], n_bins=5, reverse=False)
         
-        rfm["RFM_Score"] = rfm["R_Score"].astype(str) + rfm["F_Score"].astype(str) + rfm["M_Score"].astype(str)
+        # Convert to string for concatenation
+        rfm["R_Score"] = rfm["R_Score"].astype(str)
+        rfm["F_Score"] = rfm["F_Score"].astype(str)
+        rfm["M_Score"] = rfm["M_Score"].astype(str)
+        
+        rfm["RFM_Score"] = rfm["R_Score"] + rfm["F_Score"] + rfm["M_Score"]
         
         def segment_customer(row):
+            """Segment customers based on RFM scores"""
             try:
-                score = int(row["R_Score"]) + int(row["F_Score"]) + int(row["M_Score"])
+                r_score = int(row["R_Score"]) if str(row["R_Score"]).isdigit() else 3
+                f_score = int(row["F_Score"]) if str(row["F_Score"]).isdigit() else 3
+                m_score = int(row["M_Score"]) if str(row["M_Score"]).isdigit() else 3
+                
+                score = r_score + f_score + m_score
+                
                 if score >= 13:
                     return "Champions"
                 elif score >= 11:
@@ -956,7 +991,11 @@ if "Customer Phone" in filtered.columns or "Shipping Phone" in filtered.columns:
             fig_segments = px.pie(segment_summary, values="Customers", names="Segment",
                                 title="Customer Segmentation",
                                 color_discrete_sequence=px.colors.qualitative.Set3)
-            fig_segments.update_layout(height=400)
+            fig_segments.update_layout(
+                height=400,
+                paper_bgcolor='white',
+                font=dict(family="Arial, sans-serif", color='#1a1a1a')
+            )
             st.plotly_chart(fig_segments, use_container_width=True, config={
                 'responsive': True,
                 'displayModeBar': False
@@ -967,7 +1006,12 @@ if "Customer Phone" in filtered.columns or "Shipping Phone" in filtered.columns:
                                         title="Revenue by Customer Segment",
                                         color="Total Revenue",
                                         color_continuous_scale="Viridis")
-            fig_segment_revenue.update_layout(height=400)
+            fig_segment_revenue.update_layout(
+                height=400,
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                font=dict(family="Arial, sans-serif", color='#1a1a1a')
+            )
             st.plotly_chart(fig_segment_revenue, use_container_width=True, config={
                 'responsive': True,
                 'displayModeBar': False
@@ -989,7 +1033,12 @@ if "Customer Phone" in filtered.columns or "Shipping Phone" in filtered.columns:
             fig_recency = px.histogram(rfm, x="Recency", nbins=30,
                                       title="Recency Distribution",
                                       color_discrete_sequence=["#667eea"])
-            fig_recency.update_layout(height=300)
+            fig_recency.update_layout(
+                height=300,
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                font=dict(family="Arial, sans-serif", color='#1a1a1a')
+            )
             st.plotly_chart(fig_recency, use_container_width=True, config={
                 'responsive': True,
                 'displayModeBar': False
@@ -999,7 +1048,12 @@ if "Customer Phone" in filtered.columns or "Shipping Phone" in filtered.columns:
             fig_frequency = px.histogram(rfm, x="Frequency", nbins=20,
                                         title="Frequency Distribution",
                                         color_discrete_sequence=["#10b981"])
-            fig_frequency.update_layout(height=300)
+            fig_frequency.update_layout(
+                height=300,
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                font=dict(family="Arial, sans-serif", color='#1a1a1a')
+            )
             st.plotly_chart(fig_frequency, use_container_width=True, config={
                 'responsive': True,
                 'displayModeBar': False
@@ -1009,11 +1063,17 @@ if "Customer Phone" in filtered.columns or "Shipping Phone" in filtered.columns:
             fig_monetary = px.histogram(rfm, x="Monetary", nbins=30,
                                        title="Monetary Distribution",
                                        color_discrete_sequence=["#f59e0b"])
-            fig_monetary.update_layout(height=300)
+            fig_monetary.update_layout(
+                height=300,
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                font=dict(family="Arial, sans-serif", color='#1a1a1a')
+            )
             st.plotly_chart(fig_monetary, use_container_width=True, config={
                 'responsive': True,
                 'displayModeBar': False
             })
+            
     except Exception as e:
-        st.error(f"Error in RFM analysis: {str(e)}")
-        st.info("Some customer fields may be missing or in an unexpected format")
+        st.error(f"❌ Error in RFM analysis: {str(e)}")
+        st.info("💡 This might be due to insufficient customer data or duplicate values. The dashboard will continue to work with other features.")
