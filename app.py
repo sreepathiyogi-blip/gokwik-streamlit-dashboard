@@ -226,6 +226,34 @@ with st.sidebar:
         default=["Prepaid", "COD"]
     )
     
+    # UTM Source filter
+    if "Utm Source" in df.columns:
+        utm_sources = df["Utm Source"].dropna().unique().tolist()
+        if utm_sources:
+            utm_filter = st.multiselect(
+                "UTM Source",
+                utm_sources,
+                default=utm_sources
+            )
+        else:
+            utm_filter = []
+    else:
+        utm_filter = []
+    
+    # Campaign filter
+    if "Utm Campaign" in df.columns:
+        campaigns = df["Utm Campaign"].dropna().unique().tolist()
+        if campaigns and len(campaigns) < 50:  # Only show if reasonable number
+            campaign_filter = st.multiselect(
+                "Campaign",
+                campaigns,
+                default=campaigns[:10] if len(campaigns) > 10 else campaigns
+            )
+        else:
+            campaign_filter = campaigns if campaigns else []
+    else:
+        campaign_filter = []
+    
     st.markdown("---")
     st.markdown("### 📊 Dashboard Info")
     st.info(f"**Last Updated:** {datetime.now().strftime('%d %b %Y, %I:%M %p')}")
@@ -237,6 +265,13 @@ filtered = df[
     (df["Status"].isin(status_filter)) &
     (df["Payment Type"].isin(payment_filter))
 ]
+
+# Apply UTM filters if available
+if utm_filter and "Utm Source" in filtered.columns:
+    filtered = filtered[filtered["Utm Source"].isin(utm_filter)]
+
+if campaign_filter and "Utm Campaign" in filtered.columns:
+    filtered = filtered[filtered["Utm Campaign"].isin(campaign_filter)]
 
 # ---------------- KEY METRICS ----------------
 st.markdown('<div class="section-header">📈 Key Performance Indicators</div>', unsafe_allow_html=True)
@@ -409,8 +444,98 @@ with col2:
     
     st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- ROW 3: PRODUCTS & UTM ----------------
-st.markdown('<div class="section-header">🛍️ Product & Marketing Analysis</div>', unsafe_allow_html=True)
+# ---------------- ROW 3: UTM SOURCE & CAMPAIGN ANALYSIS ----------------
+st.markdown('<div class="section-header">📱 Marketing Performance Analysis</div>', unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # UTM Source analysis
+    if "Utm Source" in filtered.columns:
+        utm_data = filtered.groupby("Utm Source").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        utm_data.columns = ["Source", "Orders", "Revenue"]
+        utm_data = utm_data.sort_values("Orders", ascending=False).head(10)
+        utm_data["AOV"] = utm_data["Revenue"] / utm_data["Orders"]
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=utm_data["Source"],
+            y=utm_data["Orders"],
+            name="Orders",
+            marker=dict(color='#667eea'),
+            text=utm_data["Orders"],
+            textposition='outside',
+            yaxis='y'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=utm_data["Source"],
+            y=utm_data["AOV"],
+            name="AOV",
+            mode='lines+markers',
+            marker=dict(color='#f093fb', size=10),
+            line=dict(color='#f093fb', width=3),
+            yaxis='y2'
+        ))
+        
+        fig.update_layout(
+            title="UTM Source Performance: Orders & AOV",
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, title="Source"),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
+            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="AOV (₹)"),
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=50, r=50, t=50, b=50),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # Campaign analysis
+    if "Utm Campaign" in filtered.columns:
+        campaign_data = filtered.groupby("Utm Campaign").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        campaign_data.columns = ["Campaign", "Orders", "Revenue"]
+        campaign_data = campaign_data.sort_values("Revenue", ascending=True).tail(10)
+        
+        fig = go.Figure(go.Bar(
+            x=campaign_data["Revenue"],
+            y=campaign_data["Campaign"],
+            orientation='h',
+            marker=dict(
+                color=campaign_data["Revenue"],
+                colorscale='Sunset',
+                showscale=False
+            ),
+            text=[f"₹{x:,.0f}" for x in campaign_data["Revenue"]],
+            textposition='outside'
+        ))
+        
+        fig.update_layout(
+            title="Top 10 Campaigns by Revenue",
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Revenue (₹)"),
+            yaxis=dict(showgrid=False, title=""),
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- ROW 4: PRODUCTS & PAYMENT MIX ----------------
+st.markdown('<div class="section-header">🛍️ Product Analysis</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 
@@ -432,7 +557,7 @@ with col1:
                     color=product_data["Revenue"],
                     colorscale='Viridis',
                     showscale=True,
-                    colorbar=dict(title="Revenue")
+                    colorbar=dict(title="Revenue (₹)")
                 ),
                 text=product_data["Orders"],
                 textposition='outside'
@@ -453,41 +578,43 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    # UTM source analysis
-    if "Utm Source" in filtered.columns:
-        utm_data = filtered.groupby("Utm Source").agg({
-            "Order Number": "count",
-            "Grand Total": "sum"
+    # Product-wise payment split
+    if "Product Name" in filtered.columns:
+        product_payment = filtered.groupby(["Product Name", "Payment Type"]).agg({
+            "Order Number": "count"
         }).reset_index()
-        utm_data.columns = ["Source", "Orders", "Revenue"]
-        utm_data = utm_data.sort_values("Orders", ascending=False).head(8)
         
-        fig = go.Figure(data=[
-            go.Bar(
-                x=utm_data["Source"],
-                y=utm_data["Orders"],
-                marker=dict(
-                    color=['#667eea', '#764ba2', '#f093fb', '#4facfe', '#00f2fe', '#43e97b', '#fa709a', '#fee140'],
-                ),
-                text=utm_data["Orders"],
-                textposition='outside'
-            )
-        ])
+        top_products = filtered.groupby("Product Name")["Order Number"].count().nlargest(8).index.tolist()
+        product_payment = product_payment[product_payment["Product Name"].isin(top_products)]
+        
+        fig = go.Figure()
+        
+        for payment_type in ["Prepaid", "COD"]:
+            data = product_payment[product_payment["Payment Type"] == payment_type]
+            fig.add_trace(go.Bar(
+                name=payment_type,
+                x=data["Product Name"],
+                y=data["Order Number"],
+                marker=dict(color='#4facfe' if payment_type == "Prepaid" else '#f093fb')
+            ))
         
         fig.update_layout(
-            title="Traffic Source Performance",
+            title="Product-wise Payment Split (Top 8)",
             height=350,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-            font=dict(family="Arial, sans-serif", size=12),
-            margin=dict(l=50, r=50, t=50, b=50)
+            barmode='stack',
+            xaxis=dict(showgrid=False, tickangle=-45),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders"),
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=50, r=50, t=50, b=80),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         
         st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- ROW 4: RTO ANALYSIS ----------------
+# ---------------- ROW 5: RTO ANALYSIS ----------------
 st.markdown('<div class="section-header">⚠️ RTO Risk Analysis</div>', unsafe_allow_html=True)
 
 col1, col2, col3 = st.columns(3)
