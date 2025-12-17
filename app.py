@@ -160,8 +160,8 @@ if uploaded_file:
         st.error(f"❌ Missing columns: {', '.join(missing)}")
         st.stop()
 
-    # Data cleaning
-    df["Order Date"] = pd.to_datetime(df["Created At"], format="%d-%m-%Y %H:%M", errors="coerce")
+    # Data cleaning - handle multiple date formats
+    df["Order Date"] = pd.to_datetime(df["Created At"], errors="coerce", dayfirst=True)
     
     # Remove rows with invalid dates
     df = df[df["Order Date"].notna()]
