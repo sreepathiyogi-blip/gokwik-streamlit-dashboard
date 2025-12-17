@@ -114,8 +114,8 @@ def create_metric_card(label, value, delta=None, delta_color="normal"):
     
     return f"""
     <div class="metric-card">
-        <div class="metric-label">{label}</div>
-        <div class="metric-value">{value}</div>
+        <div class="metric-label" style="color: #666; font-weight: 600;">{label}</div>
+        <div class="metric-value" style="color: #1a1a1a; font-weight: 700;">{value}</div>
         {delta_html}
     </div>
     """
@@ -303,11 +303,12 @@ with col1:
     
     fig.update_layout(
         title="Daily Revenue & Orders",
-        height=400,
+        height=350,
         hovermode='x unified',
         plot_bgcolor='white',
         paper_bgcolor='white',
-        font=dict(family="Arial, sans-serif")
+        font=dict(family="Arial, sans-serif", size=12),
+        margin=dict(l=50, r=50, t=50, b=50)
     )
     
     fig.update_xaxes(showgrid=True, gridcolor='#f0f0f0')
@@ -327,17 +328,20 @@ with col2:
         labels=payment_split["Payment Type"],
         values=payment_split["Order Number"],
         hole=0.5,
-        marker=dict(colors=['#667eea', '#f093fb']),
-        textinfo='label+percent',
-        textfont_size=14
+        marker=dict(colors=['#4facfe', '#f093fb']),
+        textinfo='label+percent+value',
+        textfont_size=16,
+        textfont_color='white',
+        textposition='inside'
     )])
     
     fig.update_layout(
         title="Payment Split",
-        height=400,
-        showlegend=True,
+        height=350,
+        showlegend=False,
         paper_bgcolor='white',
-        font=dict(family="Arial, sans-serif")
+        font=dict(family="Arial, sans-serif", size=14),
+        margin=dict(l=50, r=50, t=50, b=50)
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -372,12 +376,13 @@ with col1:
         
         fig.update_layout(
             title="Top 10 States by Orders",
-            height=400,
+            height=350,
             plot_bgcolor='white',
             paper_bgcolor='white',
             xaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
             yaxis=dict(showgrid=False),
-            font=dict(family="Arial, sans-serif")
+            font=dict(family="Arial, sans-serif", size=12),
+            margin=dict(l=50, r=50, t=50, b=50)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -396,9 +401,10 @@ with col2:
     
     fig.update_layout(
         title="Order Status Funnel",
-        height=400,
+        height=350,
         paper_bgcolor='white',
-        font=dict(family="Arial, sans-serif")
+        font=dict(family="Arial, sans-serif", size=12),
+        margin=dict(l=50, r=50, t=50, b=50)
     )
     
     st.plotly_chart(fig, use_container_width=True)
@@ -435,12 +441,13 @@ with col1:
         
         fig.update_layout(
             title="Top 10 Products by Orders",
-            height=400,
+            height=350,
             plot_bgcolor='white',
             paper_bgcolor='white',
             xaxis=dict(showgrid=False, tickangle=-45),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-            font=dict(family="Arial, sans-serif")
+            font=dict(family="Arial, sans-serif", size=12),
+            margin=dict(l=50, r=50, t=50, b=80)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -469,12 +476,13 @@ with col2:
         
         fig.update_layout(
             title="Traffic Source Performance",
-            height=400,
+            height=350,
             plot_bgcolor='white',
             paper_bgcolor='white',
             xaxis=dict(showgrid=False),
             yaxis=dict(showgrid=True, gridcolor='#f0f0f0'),
-            font=dict(family="Arial, sans-serif")
+            font=dict(family="Arial, sans-serif", size=12),
+            margin=dict(l=50, r=50, t=50, b=50)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -503,10 +511,11 @@ with col1:
         
         fig.update_layout(
             title="RTO Risk Distribution",
-            height=300,
+            height=280,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            font=dict(family="Arial, sans-serif")
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=40, r=40, t=40, b=40)
         )
         
         st.plotly_chart(fig, use_container_width=True)
@@ -524,12 +533,13 @@ with col2:
         
         fig.update_layout(
             title="RTO Score Distribution",
-            height=300,
+            height=280,
             plot_bgcolor='white',
             paper_bgcolor='white',
             xaxis_title="RTO Score",
             yaxis_title="Count",
-            font=dict(family="Arial, sans-serif")
+            font=dict(family="Arial, sans-serif", size=11),
+            margin=dict(l=40, r=40, t=40, b=40)
         )
         
         st.plotly_chart(fig, use_container_width=True)
