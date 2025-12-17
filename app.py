@@ -53,7 +53,7 @@ if uploaded_file:
         st.stop()
 
     # ---- CLEANING ----
-    df["Order Date"] = pd.to_datetime(df["Created At"], errors="coerce")
+    df["Order Date"] = pd.to_datetime(df["Created At"], format="%d-%m-%Y %H:%M", errors="coerce")
     df["Grand Total"] = pd.to_numeric(df["Grand Total"], errors="coerce")
     df["Status"] = df["Merchant Order Status"]
     df["Payment Method"] = df["Payment Method"].astype(str).str.upper()
