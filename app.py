@@ -1057,10 +1057,21 @@ with col3:
         
         rfm.columns = ["CustomerID", "Recency", "Frequency", "Monetary", "HashedName"]
         
-        # RFM Scoring (1-5 scale)
-        rfm["R_Score"] = pd.qcut(rfm["Recency"], 5, labels=[5, 4, 3, 2, 1], duplicates='drop')
-        rfm["F_Score"] = pd.qcut(rfm["Frequency"].rank(method="first"), 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
-        rfm["M_Score"] = pd.qcut(rfm["Monetary"], 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
+        # RFM Scoring (1-5 scale) with safe binning
+        try:
+            rfm["R_Score"] = pd.qcut(rfm["Recency"], 5, labels=[5, 4, 3, 2, 1], duplicates='drop')
+        except ValueError:
+            rfm["R_Score"] = pd.cut(rfm["Recency"], bins=5, labels=[5, 4, 3, 2, 1], duplicates='drop')
+        
+        try:
+            rfm["F_Score"] = pd.qcut(rfm["Frequency"].rank(method="first"), 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
+        except ValueError:
+            rfm["F_Score"] = pd.cut(rfm["Frequency"], bins=5, labels=[1, 2, 3, 4, 5], duplicates='drop')
+        
+        try:
+            rfm["M_Score"] = pd.qcut(rfm["Monetary"], 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
+        except ValueError:
+            rfm["M_Score"] = pd.cut(rfm["Monetary"], bins=5, labels=[1, 2, 3, 4, 5], duplicates='drop')
         
         rfm["RFM_Score"] = rfm["R_Score"].astype(str) + rfm["F_Score"].astype(str) + rfm["M_Score"].astype(str)
         
