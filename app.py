@@ -556,38 +556,63 @@ with col1:
         }).reset_index()
         state_data.columns = ["State", "Orders", "Revenue"]
         
-        # Create choropleth map
-        fig = go.Figure(data=go.Choropleth(
-            locationmode='country names',
-            locations=state_data["State"],
-            z=state_data["Orders"],
-            text=state_data["State"],
-            colorscale='Blues',
-            autocolorscale=False,
-            reversescale=False,
-            marker_line_color='darkgray',
-            marker_line_width=0.5,
-            colorbar_title="Orders",
-            hovertemplate='<b>%{text}</b><br>Orders: %{z:,}<extra></extra>'
+        # Map state names to standard format for better visualization
+        state_data["State_Clean"] = state_data["State"].str.title().str.strip()
+        
+        # Create India map using scatter geo
+        fig = go.Figure()
+        
+        # Add state data as markers (India states)
+        fig.add_trace(go.Scattergeo(
+            lon=[77.1025, 72.8777, 88.3639, 80.2707, 78.4867, 75.7139, 85.3240, 
+                 76.2711, 73.8567, 74.7973, 78.9629, 79.0193, 93.9368, 91.8933,
+                 83.9956, 70.8022, 92.9376, 76.6413, 84.8536, 75.5762, 73.0169,
+                 77.5946, 74.6239, 91.2868, 73.1812, 81.6296, 85.8245, 74.4977,
+                 93.7170, 84.6897, 72.5714, 76.7794, 77.4126, 72.8826],
+            lat=[28.7041, 19.0760, 22.5726, 13.0827, 17.3850, 19.0760, 25.0961,
+                 9.9312, 18.5204, 34.0837, 30.7333, 21.1702, 24.6637, 26.2006,
+                 27.0974, 22.2587, 25.4670, 12.2958, 26.8467, 31.1471, 26.0289,
+                 23.2599, 15.2993, 25.4358, 19.0330, 16.5062, 20.9517, 26.8467,
+                 26.1584, 27.0238, 21.7679, 24.5854, 28.4089, 23.0225],
+            text=state_data["State_Clean"],
+            marker=dict(
+                size=state_data["Orders"].values / state_data["Orders"].max() * 50 + 10,
+                color=state_data["Orders"].values,
+                colorscale='Blues',
+                showscale=True,
+                colorbar=dict(
+                    title="Orders",
+                    x=1.1
+                ),
+                line=dict(width=1, color='white'),
+                sizemode='diameter'
+            ),
+            hovertemplate='<b>%{text}</b><br>' +
+                         'Orders: %{marker.color:,.0f}<br>' +
+                         '<extra></extra>',
+            showlegend=False
         ))
         
         fig.update_geos(
-            visible=False,
+            visible=True,
             resolution=50,
-            showcountries=False,
-            showcoastlines=False,
-            showland=False,
-            fitbounds="locations"
+            scope="asia",
+            showcountries=True,
+            countrycolor="lightgray",
+            showsubunits=True,
+            subunitcolor="white",
+            lonaxis_range=[68, 97],
+            lataxis_range=[8, 35],
+            bgcolor='rgba(240,240,240,0.3)',
+            projection_type="mercator"
         )
         
         fig.update_layout(
-            title=dict(text="State-wise Order Distribution", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            geo=dict(
-                bgcolor='white',
-                lakecolor='white',
-                landcolor='#f0f0f0'
+            title=dict(
+                text="State-wise Order Distribution (India Map)", 
+                font=dict(size=16, color='#1a1a1a')
             ),
+            height=400,
             paper_bgcolor='white',
             font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
             margin=dict(l=20, r=20, t=60, b=20)
@@ -816,34 +841,43 @@ if "Customer ID" in filtered.columns:
     
     rfm_data.columns = ["Customer ID", "Recency", "Frequency", "Monetary"]
     
-    # Calculate RFM scores (1-5 scale) with error handling
-    try:
-        rfm_data["R_Score"] = pd.qcut(rfm_data["Recency"], 5, labels=[5, 4, 3, 2, 1], duplicates='drop')
-    except ValueError:
-        # If not enough unique values, use fewer bins
-        n_bins = min(5, rfm_data["Recency"].nunique())
-        if n_bins > 1:
-            rfm_data["R_Score"] = pd.qcut(rfm_data["Recency"], n_bins, labels=range(n_bins, 0, -1), duplicates='drop')
-        else:
-            rfm_data["R_Score"] = 3
+    # Calculate RFM scores (1-5 scale) with robust error handling
+    def calculate_score(data, column, ascending=True):
+        """Calculate score with proper bin handling"""
+        try:
+            unique_values = data[column].nunique()
+            if unique_values <= 1:
+                return pd.Series([3] * len(data), index=data.index)
+            
+            n_bins = min(5, unique_values)
+            if ascending:
+                labels = list(range(1, n_bins + 1))
+            else:
+                labels = list(range(n_bins, 0, -1))
+            
+            # Try qcut first
+            if column == "Frequency":
+                return pd.qcut(data[column].rank(method='first'), n_bins, labels=labels, duplicates='drop')
+            else:
+                return pd.qcut(data[column], n_bins, labels=labels, duplicates='drop')
+        except:
+            # Fallback to cut if qcut fails
+            try:
+                if column == "Frequency":
+                    return pd.cut(data[column].rank(method='first'), n_bins, labels=labels, duplicates='drop')
+                else:
+                    return pd.cut(data[column], n_bins, labels=labels, duplicates='drop')
+            except:
+                # Final fallback: use rank-based binning
+                ranks = data[column].rank(method='first', pct=True)
+                if ascending:
+                    return pd.cut(ranks, bins=5, labels=[1, 2, 3, 4, 5])
+                else:
+                    return pd.cut(ranks, bins=5, labels=[5, 4, 3, 2, 1])
     
-    try:
-        rfm_data["F_Score"] = pd.qcut(rfm_data["Frequency"].rank(method='first'), 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
-    except ValueError:
-        n_bins = min(5, rfm_data["Frequency"].nunique())
-        if n_bins > 1:
-            rfm_data["F_Score"] = pd.qcut(rfm_data["Frequency"].rank(method='first'), n_bins, labels=range(1, n_bins + 1), duplicates='drop')
-        else:
-            rfm_data["F_Score"] = 3
-    
-    try:
-        rfm_data["M_Score"] = pd.qcut(rfm_data["Monetary"], 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
-    except ValueError:
-        n_bins = min(5, rfm_data["Monetary"].nunique())
-        if n_bins > 1:
-            rfm_data["M_Score"] = pd.qcut(rfm_data["Monetary"], n_bins, labels=range(1, n_bins + 1), duplicates='drop')
-        else:
-            rfm_data["M_Score"] = 3
+    rfm_data["R_Score"] = calculate_score(rfm_data, "Recency", ascending=False)
+    rfm_data["F_Score"] = calculate_score(rfm_data, "Frequency", ascending=True)
+    rfm_data["M_Score"] = calculate_score(rfm_data, "Monetary", ascending=True)
     
     rfm_data["RFM_Score"] = rfm_data["R_Score"].astype(str) + rfm_data["F_Score"].astype(str) + rfm_data["M_Score"].astype(str)
     rfm_data["RFM_Total"] = rfm_data["R_Score"].astype(int) + rfm_data["F_Score"].astype(int) + rfm_data["M_Score"].astype(int)
