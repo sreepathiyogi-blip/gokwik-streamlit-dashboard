@@ -83,15 +83,27 @@ st.markdown("""
     
     /* Section headers */
     .section-header {
-        font-size: 22px;
+        font-size: 24px;
         font-weight: 700;
         color: #1a1a1a;
-        margin: 35px 0 20px 0;
-        padding: 18px 20px;
-        border-left: 5px solid #667eea;
+        margin: 40px 0 25px 0;
+        padding: 20px 25px;
+        border-left: 6px solid #667eea;
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-        border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        border-radius: 12px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .section-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+        background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
     }
     
     /* Chart containers */
@@ -134,11 +146,22 @@ st.markdown("""
         font-weight: 600;
         transition: all 0.3s ease;
         box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        width: 100%;
+        height: 80px;
+        font-size: 13px;
+        white-space: pre-line;
+        line-height: 1.4;
     }
     
     .stButton>button:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    }
+    
+    .stButton>button:active {
+        transform: translateY(0px);
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
     }
     
     /* Dataframe styling */
@@ -202,18 +225,141 @@ def create_metric_card(label, value, delta=None, delta_color="normal"):
     </div>
     """
 
-def get_city_tier(state):
-    """Classify cities into tiers based on state (simplified logic)"""
-    tier_1_states = ['MAHARASHTRA', 'DELHI', 'KARNATAKA', 'TAMIL NADU', 'TELANGANA', 'WEST BENGAL', 'GUJARAT']
-    tier_2_states = ['PUNJAB', 'HARYANA', 'RAJASTHAN', 'KERALA', 'MADHYA PRADESH', 'UTTAR PRADESH']
+def get_city_tier(pincode):
+    """Classify cities into tiers based on pincode"""
+    if pd.isna(pincode):
+        return 'Unknown'
     
-    state_upper = str(state).upper()
-    if any(t1 in state_upper for t1 in tier_1_states):
+    pincode_str = str(pincode).strip()[:3]  # Get first 3 digits
+    
+    try:
+        pincode_prefix = int(pincode_str)
+    except:
+        return 'Unknown'
+    
+    # Tier 1 cities pincodes (Major metros)
+    tier_1_pincodes = [
+        # Mumbai
+        400, 401,
+        # Delhi/NCR
+        110, 121, 122, 201, 122, 124, 125, 127, 128, 134,
+        # Bangalore
+        560, 562, 563,
+        # Hyderabad
+        500, 501, 502, 503, 504, 505, 508,
+        # Chennai
+        600, 601, 602, 603,
+        # Kolkata
+        700, 711, 712, 713, 721, 722, 743,
+        # Pune
+        411, 412,
+        # Ahmedabad
+        380, 382, 383,
+    ]
+    
+    # Tier 2 cities pincodes
+    tier_2_pincodes = [
+        # Jaipur
+        302, 303,
+        # Lucknow
+        226, 227,
+        # Kanpur
+        208, 209,
+        # Nagpur
+        440, 441, 442,
+        # Indore
+        452, 453,
+        # Bhopal
+        462, 463,
+        # Visakhapatnam
+        530, 531,
+        # Vadodara
+        390, 391,
+        # Ludhiana
+        141, 142,
+        # Agra
+        282, 283,
+        # Nashik
+        422, 423,
+        # Faridabad
+        121,
+        # Meerut
+        250, 251,
+        # Rajkot
+        360, 361,
+        # Varanasi
+        221, 222,
+        # Srinagar
+        190, 191, 192, 193, 194,
+        # Amritsar
+        143,
+        # Allahabad
+        211, 212,
+        # Ranchi
+        834, 835,
+        # Howrah
+        711,
+        # Coimbatore
+        641, 642,
+        # Vijayawada
+        520, 521,
+        # Jodhpur
+        342, 344,
+        # Madurai
+        625, 626,
+        # Raipur
+        492, 493,
+        # Kota
+        324, 325,
+        # Guwahati
+        781, 782, 783,
+        # Chandigarh
+        160, 140,
+        # Gurgaon
+        122,
+        # Noida
+        201,
+    ]
+    
+    if pincode_prefix in tier_1_pincodes:
         return 'Tier 1'
-    elif any(t2 in state_upper for t2 in tier_2_states):
+    elif pincode_prefix in tier_2_pincodes:
         return 'Tier 2'
     else:
         return 'Tier 3'
+
+def map_utm_source(utm_source):
+    """Map UTM sources to platform categories"""
+    if pd.isna(utm_source):
+        return 'Other'
+    
+    utm_lower = str(utm_source).lower()
+    
+    # Meta platforms
+    if any(x in utm_lower for x in ['facebook', 'fb', 'instagram', 'ig', 'meta']):
+        return 'Meta'
+    # Google platforms
+    elif any(x in utm_lower for x in ['google', 'gdn', 'gsearch', 'adwords', 'youtube']):
+        return 'Google'
+    # Other platforms
+    elif any(x in utm_lower for x in ['twitter', 'x.com']):
+        return 'Twitter'
+    elif 'linkedin' in utm_lower:
+        return 'LinkedIn'
+    elif 'snapchat' in utm_lower:
+        return 'Snapchat'
+    elif 'tiktok' in utm_lower:
+        return 'TikTok'
+    elif 'pinterest' in utm_lower:
+        return 'Pinterest'
+    elif 'whatsapp' in utm_lower:
+        return 'WhatsApp'
+    elif any(x in utm_lower for x in ['email', 'mail']):
+        return 'Email'
+    elif any(x in utm_lower for x in ['organic', 'direct', 'referral']):
+        return 'Organic'
+    else:
+        return 'Other'
 
 # ---------------- HEADER ----------------
 st.markdown("""
@@ -222,6 +368,46 @@ st.markdown("""
     <p>Real-time insights into your e-commerce performance</p>
 </div>
 """, unsafe_allow_html=True)
+
+# ---------------- QUICK FILTERS (TOP BUTTONS) ----------------
+if not uploaded_file:
+    df = load_data()
+    if df is not None and "UTM Platform" in df.columns:
+        st.markdown('<div class="section-header">🎯 Quick Platform Filters</div>', unsafe_allow_html=True)
+        
+        # Get platform counts
+        platform_counts = df["UTM Platform"].value_counts().to_dict()
+        
+        # Create filter buttons in columns
+        cols = st.columns(8)
+        
+        platforms = ['Meta', 'Google', 'Organic', 'Email', 'WhatsApp', 'Twitter', 'LinkedIn', 'Other']
+        platform_icons = {
+            'Meta': '📱',
+            'Google': '🔍',
+            'Organic': '🌱',
+            'Email': '📧',
+            'WhatsApp': '💬',
+            'Twitter': '🐦',
+            'LinkedIn': '💼',
+            'Other': '🔗'
+        }
+        
+        selected_platforms = []
+        for idx, platform in enumerate(platforms):
+            with cols[idx]:
+                count = platform_counts.get(platform, 0)
+                if st.button(f"{platform_icons.get(platform, '•')} {platform}\n({count:,})", 
+                           key=f"btn_{platform}",
+                           use_container_width=True):
+                    selected_platforms.append(platform)
+        
+        # Store selected platform in session state
+        if 'selected_platform' not in st.session_state:
+            st.session_state.selected_platform = None
+        
+        if selected_platforms:
+            st.session_state.selected_platform = selected_platforms[0]
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
@@ -268,13 +454,23 @@ if uploaded_file:
         lambda x: "COD" if "COD" in str(x) else "Prepaid"
     )
     
-    # Hash customer names for privacy
-    if "Customer Name" in df.columns:
+    # Use existing hashed customer phone as Customer ID
+    if "Customer Phone" in df.columns:
+        df["Customer ID"] = df["Customer Phone"].apply(lambda x: str(x).split('|')[0] if pd.notna(x) else "Unknown")
+    elif "Customer Name" in df.columns:
         df["Customer ID"] = df["Customer Name"].apply(hash_customer_name)
     
-    # Add city tier classification
-    if "Billing State" in df.columns:
-        df["City Tier"] = df["Billing State"].apply(get_city_tier)
+    # Add city tier classification based on pincode
+    if "Billing Pincode" in df.columns:
+        df["City Tier"] = df["Billing Pincode"].apply(get_city_tier)
+    elif "Shipping Pincode" in df.columns:
+        df["City Tier"] = df["Shipping Pincode"].apply(get_city_tier)
+    else:
+        df["City Tier"] = "Unknown"
+    
+    # Map UTM sources to platforms
+    if "Utm Source" in df.columns:
+        df["UTM Platform"] = df["Utm Source"].apply(map_utm_source)
 
     save_data(df)
     with st.sidebar:
@@ -335,6 +531,24 @@ with st.sidebar:
     else:
         tier_filter = []
     
+    # Platform filter (mapped UTM sources)
+    if "UTM Platform" in df.columns:
+        platforms = df["UTM Platform"].unique().tolist()
+        
+        # Set default based on session state
+        if 'selected_platform' in st.session_state and st.session_state.selected_platform:
+            default_platforms = [st.session_state.selected_platform]
+        else:
+            default_platforms = platforms
+        
+        platform_filter = st.multiselect(
+            "Platform (UTM)",
+            platforms,
+            default=default_platforms
+        )
+    else:
+        platform_filter = []
+    
     # UTM Source filter
     if "Utm Source" in df.columns:
         utm_sources = df["Utm Source"].dropna().unique().tolist()
@@ -388,6 +602,10 @@ filtered = df[
 # Apply City Tier filter
 if tier_filter and "City Tier" in filtered.columns:
     filtered = filtered[filtered["City Tier"].isin(tier_filter)]
+
+# Apply Platform filter
+if platform_filter and "UTM Platform" in filtered.columns:
+    filtered = filtered[filtered["UTM Platform"].isin(platform_filter)]
 
 # Apply UTM filters if available
 if utm_filter and "Utm Source" in filtered.columns:
@@ -1143,7 +1361,8 @@ st.markdown('<div class="section-header">📋 Detailed Order Data</div>', unsafe
 
 display_cols = [
     "Order Number", "Order Date", "Status", "Payment Method", 
-    "Grand Total", "Customer ID", "Billing State", "Product Name", "City Tier"
+    "Grand Total", "Customer ID", "Billing State", "Billing City", 
+    "Billing Pincode", "City Tier", "Product Name", "Utm Source", "Utm Campaign"
 ]
 display_cols = [col for col in display_cols if col in filtered.columns]
 
