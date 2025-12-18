@@ -771,6 +771,8 @@ col1, col2 = st.columns(2)
 
 with col1:
     if "Utm Content" in filtered.columns:
+        st.markdown("#### Top 10 UTM Content: COD vs Prepaid")
+        
         utm_content_data = filtered.groupby(["Utm Content", "Payment Type"]).agg({
             "Order Number": "count",
             "Grand Total": "sum"
@@ -779,34 +781,43 @@ with col1:
         top_contents = filtered.groupby("Utm Content")["Order Number"].count().nlargest(10).index.tolist()
         utm_content_data = utm_content_data[utm_content_data["Utm Content"].isin(top_contents)]
         
-        fig = go.Figure()
+        # Pivot to create table
+        table_data = utm_content_data.pivot_table(
+            index="Utm Content",
+            columns="Payment Type",
+            values="Order Number",
+            fill_value=0
+        ).reset_index()
         
-        for payment_type in ["Prepaid", "COD"]:
-            data = utm_content_data[utm_content_data["Payment Type"] == payment_type]
-            fig.add_trace(go.Bar(
-                name=payment_type,
-                x=data["Utm Content"],
-                y=data["Order Number"],
-                marker=dict(color='#4facfe' if payment_type == "Prepaid" else '#f093fb'),
-                text=data["Order Number"],
-                textposition='inside'
-            ))
+        # Ensure both columns exist
+        if "Prepaid" not in table_data.columns:
+            table_data["Prepaid"] = 0
+        if "COD" not in table_data.columns:
+            table_data["COD"] = 0
         
-        fig.update_layout(
-            title=dict(text="Top 10 UTM Content: COD vs Prepaid", font=dict(size=16, color='#1a1a1a')),
+        # Add total column
+        table_data["Total Orders"] = table_data["Prepaid"] + table_data["COD"]
+        table_data["Prepaid %"] = (table_data["Prepaid"] / table_data["Total Orders"] * 100).round(1)
+        table_data["COD %"] = (table_data["COD"] / table_data["Total Orders"] * 100).round(1)
+        
+        # Sort by total orders
+        table_data = table_data.sort_values("Total Orders", ascending=False)
+        
+        # Reorder columns
+        table_data = table_data[["Utm Content", "Prepaid", "COD", "Total Orders", "Prepaid %", "COD %"]]
+        
+        st.dataframe(
+            table_data.style.format({
+                "Prepaid": "{:,.0f}",
+                "COD": "{:,.0f}",
+                "Total Orders": "{:,.0f}",
+                "Prepaid %": "{:.1f}%",
+                "COD %": "{:.1f}%"
+            }),
+            use_container_width=True,
             height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            barmode='stack',
-            xaxis=dict(showgrid=False, title="UTM Content", tickangle=-45, tickfont=dict(color='#1a1a1a', size=10), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=120),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
+            hide_index=True
         )
-        
-        st.plotly_chart(fig, use_container_width=True)
     elif "Utm Source" in filtered.columns:
         utm_data = filtered.groupby("Utm Source").agg({
             "Order Number": "count",
