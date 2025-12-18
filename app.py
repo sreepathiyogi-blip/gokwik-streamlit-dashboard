@@ -400,19 +400,8 @@ with st.sidebar:
     else:
         utm_filter = []
     
-    # Campaign filter
-    if "Utm Campaign" in df.columns:
-        campaigns = df["Utm Campaign"].dropna().unique().tolist()
-        if campaigns and len(campaigns) < 50:
-            campaign_filter = st.multiselect(
-                "Campaign",
-                campaigns,
-                default=campaigns[:10] if len(campaigns) > 10 else campaigns
-            )
-        else:
-            campaign_filter = campaigns if campaigns else []
-    else:
-        campaign_filter = []
+    # Campaign filter removed
+    campaign_filter = []
     
     st.markdown("---")
     
