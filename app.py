@@ -729,8 +729,13 @@ with st.sidebar:
     if "UTM Platform" in df.columns:
         platforms = sorted(df["UTM Platform"].unique().tolist())
         
+        # Ensure selected platform exists in current data
         if 'selected_platform' in st.session_state and st.session_state.selected_platform:
-            default_platforms = [st.session_state.selected_platform]
+            if st.session_state.selected_platform in platforms:
+                default_platforms = [st.session_state.selected_platform]
+            else:
+                default_platforms = platforms
+                st.session_state.selected_platform = None
         else:
             default_platforms = platforms
         
