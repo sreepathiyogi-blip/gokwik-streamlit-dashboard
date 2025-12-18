@@ -15,45 +15,22 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ---------------- STORAGE INFO ----------------
-"""
-STORAGE LIMITS & SOLUTIONS:
-1. Streamlit Cloud: ~1GB storage, good for 500K-1M orders
-2. Google Drive: Unlimited (requires setup - see sidebar)
-3. Current: Parquet format (10x compression vs CSV)
-"""
-
-# Check if Google Drive is configured
-GDRIVE_ENABLED = False
-try:
-    if "GDRIVE_FOLDER_ID" in st.secrets:
-        GDRIVE_ENABLED = True
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
-        import io
-        
-        SCOPES = ['https://www.googleapis.com/auth/drive']
-        SERVICE_ACCOUNT_INFO = dict(st.secrets["gcp_service_account"])
-        credentials = service_account.Credentials.from_service_account_info(
-            SERVICE_ACCOUNT_INFO, scopes=SCOPES
-        )
-        drive_service = build('drive', 'v3', credentials=credentials)
-        GDRIVE_FOLDER_ID = st.secrets["GDRIVE_FOLDER_ID"]
-except:
-    GDRIVE_ENABLED = False
-
 # ---------------- CUSTOM CSS ----------------
 st.markdown("""
 <style>
+    /* Main background */
     .main {
         background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         padding: 20px;
     }
+    
+    /* Ensure consistent sizing */
     .block-container {
         max-width: 100%;
         padding: 1rem 2rem;
     }
+    
+    /* Card styling */
     .metric-card {
         background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
         padding: 25px;
@@ -68,10 +45,13 @@ st.markdown("""
         flex-direction: column;
         justify-content: center;
     }
+    
     .metric-card:hover {
         transform: translateY(-5px);
         box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
     }
+    
+    /* Metric value */
     .metric-value {
         font-size: 36px;
         font-weight: 700;
@@ -79,6 +59,8 @@ st.markdown("""
         margin: 10px 0;
         text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
     }
+    
+    /* Metric label */
     .metric-label {
         font-size: 13px;
         color: #666;
@@ -87,6 +69,8 @@ st.markdown("""
         font-weight: 600;
         margin-bottom: 8px;
     }
+    
+    /* Header styling */
     .dashboard-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 30px;
@@ -96,6 +80,8 @@ st.markdown("""
         margin-bottom: 30px;
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
     }
+    
+    /* Section headers */
     .section-header {
         font-size: 24px;
         font-weight: 700;
@@ -109,6 +95,7 @@ st.markdown("""
         position: relative;
         overflow: hidden;
     }
+    
     .section-header::before {
         content: '';
         position: absolute;
@@ -118,6 +105,8 @@ st.markdown("""
         height: 100%;
         background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
     }
+    
+    /* Chart containers */
     .js-plotly-plot {
         border-radius: 12px;
         overflow: hidden;
@@ -125,15 +114,29 @@ st.markdown("""
         background: white;
         margin: 10px 0;
     }
+    
+    /* Remove streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    /* File uploader styling */
+    .uploadedFile {
+        background: white;
+        border-radius: 10px;
+        padding: 10px;
+    }
+    
+    /* Sidebar styling */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
         box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
     }
+    
     [data-testid="stSidebar"] * {
         color: white !important;
     }
+    
+    /* Streamlit elements */
     .stButton>button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -149,28 +152,36 @@ st.markdown("""
         white-space: pre-line;
         line-height: 1.4;
     }
+    
     .stButton>button:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
         background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
     }
+    
     .stButton>button:active {
         transform: translateY(0px);
         box-shadow: 0 2px 8px rgba(102, 126, 234, 0.5);
     }
+    
+    /* Dataframe styling */
     .dataframe {
         border-radius: 10px !important;
         overflow: hidden !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
     }
+    
+    /* Responsive adjustments */
     @media (max-width: 768px) {
         .metric-card {
             padding: 15px;
             min-height: 120px;
         }
+        
         .metric-value {
             font-size: 28px;
         }
+        
         .section-header {
             font-size: 18px;
             padding: 12px 15px;
@@ -181,126 +192,31 @@ st.markdown("""
 
 DATA_DIR = "data"
 DATA_FILE = f"{DATA_DIR}/latest.parquet"
-GDRIVE_FILE_NAME = "gokwik_orders.parquet"
 os.makedirs(DATA_DIR, exist_ok=True)
-
-# ---------------- GOOGLE DRIVE HELPERS ----------------
-def upload_to_gdrive(file_path):
-    if not GDRIVE_ENABLED:
-        return None
-    try:
-        results = drive_service.files().list(
-            q=f"name='{GDRIVE_FILE_NAME}' and '{GDRIVE_FOLDER_ID}' in parents and trashed=false",
-            spaces='drive',
-            fields='files(id, name)'
-        ).execute()
-        
-        file_metadata = {'name': GDRIVE_FILE_NAME, 'parents': [GDRIVE_FOLDER_ID]}
-        media = MediaFileUpload(file_path, mimetype='application/octet-stream')
-        
-        if results.get('files'):
-            file_id = results['files'][0]['id']
-            file = drive_service.files().update(fileId=file_id, media_body=media).execute()
-        else:
-            file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-        return file.get('id')
-    except Exception as e:
-        st.error(f"GDrive upload error: {str(e)}")
-        return None
-
-def download_from_gdrive(file_path):
-    if not GDRIVE_ENABLED:
-        return False
-    try:
-        results = drive_service.files().list(
-            q=f"name='{GDRIVE_FILE_NAME}' and '{GDRIVE_FOLDER_ID}' in parents and trashed=false",
-            spaces='drive',
-            fields='files(id, name)'
-        ).execute()
-        
-        if not results.get('files'):
-            return False
-        
-        file_id = results['files'][0]['id']
-        request = drive_service.files().get_media(fileId=file_id)
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-        
-        with open(file_path, 'wb') as f:
-            f.write(fh.getvalue())
-        return True
-    except Exception as e:
-        st.error(f"GDrive download error: {str(e)}")
-        return False
-
-def get_gdrive_storage_info():
-    if not GDRIVE_ENABLED:
-        return None
-    try:
-        about = drive_service.about().get(fields="storageQuota").execute()
-        quota = about.get('storageQuota', {})
-        total = int(quota.get('limit', 0))
-        used = int(quota.get('usage', 0))
-        return {
-            'total_gb': total / (1024**3),
-            'used_gb': used / (1024**3),
-            'available_gb': (total - used) / (1024**3)
-        }
-    except:
-        return None
 
 # ---------------- HELPERS ----------------
 @st.cache_data(show_spinner=False)
 def load_data():
     if os.path.exists(DATA_FILE):
         return pd.read_parquet(DATA_FILE)
-    if GDRIVE_ENABLED:
-        with st.spinner("📥 Downloading from Google Drive..."):
-            if download_from_gdrive(DATA_FILE):
-                return pd.read_parquet(DATA_FILE)
     return None
 
 def save_data(df):
-    if os.path.exists(DATA_FILE):
-        try:
-            existing_df = pd.read_parquet(DATA_FILE)
-            combined_df = pd.concat([existing_df, df], ignore_index=True)
-            combined_df = combined_df.sort_values("Order Date", ascending=False)
-            combined_df = combined_df.drop_duplicates(subset=["Order Number"], keep="first")
-            combined_df = combined_df.sort_values("Order Date", ascending=True)
-            combined_df["__last_updated__"] = date.today()
-            combined_df.to_parquet(DATA_FILE, index=False)
-            if GDRIVE_ENABLED:
-                with st.spinner("☁️ Syncing to Google Drive..."):
-                    upload_to_gdrive(DATA_FILE)
-            return len(df), len(combined_df) - len(existing_df)
-        except:
-            df["__last_updated__"] = date.today()
-            df.to_parquet(DATA_FILE, index=False)
-            if GDRIVE_ENABLED:
-                upload_to_gdrive(DATA_FILE)
-            return len(df), len(df)
-    else:
-        df["__last_updated__"] = date.today()
-        df.to_parquet(DATA_FILE, index=False)
-        if GDRIVE_ENABLED:
-            with st.spinner("☁️ Uploading to Google Drive..."):
-                upload_to_gdrive(DATA_FILE)
-        return len(df), len(df)
+    df["__last_updated__"] = date.today()
+    df.to_parquet(DATA_FILE, index=False)
 
 def read_file(file):
     return pd.read_csv(file) if file.name.endswith(".csv") else pd.read_excel(file)
 
 def hash_customer_name(name):
+    """Hash customer name for privacy"""
     if pd.isna(name):
         return "Unknown"
     return hashlib.md5(str(name).encode()).hexdigest()[:8]
 
 def create_metric_card(label, value, delta=None, delta_color="normal"):
     delta_html = f'<div style="color: {"#10b981" if delta_color == "normal" else "#ef4444"}; font-size: 14px; font-weight: 600; margin-top: 8px;">{delta}</div>' if delta else ""
+    
     return f"""
     <div class="metric-card">
         <div class="metric-label">{label}</div>
@@ -310,23 +226,100 @@ def create_metric_card(label, value, delta=None, delta_color="normal"):
     """
 
 def get_city_tier(pincode):
+    """Classify cities into tiers based on pincode"""
     if pd.isna(pincode):
         return 'Unknown'
-    pincode_str = str(pincode).strip()[:3]
+    
+    pincode_str = str(pincode).strip()[:3]  # Get first 3 digits
+    
     try:
         pincode_prefix = int(pincode_str)
     except:
         return 'Unknown'
     
-    tier_1_pincodes = [400, 401, 110, 121, 122, 201, 124, 125, 127, 128, 134,
-                       560, 562, 563, 500, 501, 502, 503, 504, 505, 508,
-                       600, 601, 602, 603, 700, 711, 712, 713, 721, 722, 743,
-                       411, 412, 380, 382, 383]
-    tier_2_pincodes = [302, 303, 226, 227, 208, 209, 440, 441, 442, 452, 453,
-                       462, 463, 530, 531, 390, 391, 141, 142, 282, 283, 422, 423,
-                       250, 251, 360, 361, 221, 222, 190, 191, 192, 193, 194, 143,
-                       211, 212, 834, 835, 641, 642, 520, 521, 342, 344, 625, 626,
-                       492, 493, 324, 325, 781, 782, 783, 160, 140]
+    # Tier 1 cities pincodes (Major metros)
+    tier_1_pincodes = [
+        # Mumbai
+        400, 401,
+        # Delhi/NCR
+        110, 121, 122, 201, 122, 124, 125, 127, 128, 134,
+        # Bangalore
+        560, 562, 563,
+        # Hyderabad
+        500, 501, 502, 503, 504, 505, 508,
+        # Chennai
+        600, 601, 602, 603,
+        # Kolkata
+        700, 711, 712, 713, 721, 722, 743,
+        # Pune
+        411, 412,
+        # Ahmedabad
+        380, 382, 383,
+    ]
+    
+    # Tier 2 cities pincodes
+    tier_2_pincodes = [
+        # Jaipur
+        302, 303,
+        # Lucknow
+        226, 227,
+        # Kanpur
+        208, 209,
+        # Nagpur
+        440, 441, 442,
+        # Indore
+        452, 453,
+        # Bhopal
+        462, 463,
+        # Visakhapatnam
+        530, 531,
+        # Vadodara
+        390, 391,
+        # Ludhiana
+        141, 142,
+        # Agra
+        282, 283,
+        # Nashik
+        422, 423,
+        # Faridabad
+        121,
+        # Meerut
+        250, 251,
+        # Rajkot
+        360, 361,
+        # Varanasi
+        221, 222,
+        # Srinagar
+        190, 191, 192, 193, 194,
+        # Amritsar
+        143,
+        # Allahabad
+        211, 212,
+        # Ranchi
+        834, 835,
+        # Howrah
+        711,
+        # Coimbatore
+        641, 642,
+        # Vijayawada
+        520, 521,
+        # Jodhpur
+        342, 344,
+        # Madurai
+        625, 626,
+        # Raipur
+        492, 493,
+        # Kota
+        324, 325,
+        # Guwahati
+        781, 782, 783,
+        # Chandigarh
+        160, 140,
+        # Gurgaon
+        122,
+        # Noida
+        201,
+    ]
     
     if pincode_prefix in tier_1_pincodes:
         return 'Tier 1'
@@ -336,13 +329,19 @@ def get_city_tier(pincode):
         return 'Tier 3'
 
 def map_utm_source(utm_source):
+    """Map UTM sources to platform categories"""
     if pd.isna(utm_source):
         return 'Other'
+    
     utm_lower = str(utm_source).lower()
+    
+    # Meta platforms
     if any(x in utm_lower for x in ['facebook', 'fb', 'instagram', 'ig', 'meta']):
         return 'Meta'
+    # Google platforms
     elif any(x in utm_lower for x in ['google', 'gdn', 'gsearch', 'adwords', 'youtube']):
         return 'Google'
+    # Other platforms
     elif any(x in utm_lower for x in ['twitter', 'x.com']):
         return 'Twitter'
     elif 'linkedin' in utm_lower:
@@ -381,78 +380,47 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Storage status
-    st.markdown("### 💾 Storage Status")
-    if GDRIVE_ENABLED:
-        st.success("✅ Google Drive Connected")
-        storage_info = get_gdrive_storage_info()
-        if storage_info:
-            st.metric("Available", f"{storage_info['available_gb']:.2f} GB")
-    else:
-        st.warning("⚠️ Local Storage Only")
-        st.caption("💡 Connect Google Drive for unlimited storage")
-        with st.expander("📖 How to Connect Google Drive"):
-            st.markdown("""
-            **Setup Steps:**
-            1. Create Google Cloud Project
-            2. Enable Google Drive API
-            3. Create Service Account → Download JSON
-            4. Share Drive Folder with service account email
-            5. Add to Streamlit Secrets (see documentation)
-            """)
-    
-    st.markdown("---")
-    
-    # Current data info
-    if os.path.exists(DATA_FILE):
-        try:
-            existing_data = pd.read_parquet(DATA_FILE)
-            file_size = os.path.getsize(DATA_FILE) / (1024 * 1024)
-            st.markdown("### 📊 Current Database")
-            st.metric("Total Orders", f"{len(existing_data):,}")
-            st.metric("File Size", f"{file_size:.2f} MB")
-            if "Order Date" in existing_data.columns:
-                min_date = existing_data["Order Date"].min().strftime("%d %b %Y")
-                max_date = existing_data["Order Date"].max().strftime("%d %b %Y")
-                st.info(f"📅 **Range:** {min_date} to {max_date}")
-            st.markdown("---")
-            col1, col2 = st.columns(2)
-            with col1:
-                if GDRIVE_ENABLED:
-                    if st.button("☁️ Sync", use_container_width=True):
-                        upload_to_gdrive(DATA_FILE)
-                        st.success("Synced!")
-            with col2:
-                if st.button("🗑️ Clear", use_container_width=True):
-                    os.remove(DATA_FILE)
-                    st.success("Cleared!")
-                    st.rerun()
-        except:
-            pass
+    if uploaded_file:
+        st.success("✅ File uploaded successfully")
 
 # ---------------- UPLOAD PROCESSING ----------------
 if uploaded_file:
     df = read_file(uploaded_file)
     df.columns = df.columns.str.strip()
 
-    REQUIRED = ["Order Number", "Created At", "Merchant Order Status", "Payment Method", "Grand Total"]
+    REQUIRED = [
+        "Order Number",
+        "Created At",
+        "Merchant Order Status",
+        "Payment Method",
+        "Grand Total"
+    ]
+
     missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
         st.error(f"❌ Missing columns: {', '.join(missing)}")
         st.stop()
 
+    # Data cleaning - handle multiple date formats
     df["Order Date"] = pd.to_datetime(df["Created At"], errors="coerce", dayfirst=True)
+    
+    # Remove rows with invalid dates
     df = df[df["Order Date"].notna()]
+    
     df["Grand Total"] = pd.to_numeric(df["Grand Total"], errors="coerce")
     df["Status"] = df["Merchant Order Status"]
     df["Payment Method"] = df["Payment Method"].astype(str).str.upper()
-    df["Payment Type"] = df["Payment Method"].apply(lambda x: "COD" if "COD" in str(x) else "Prepaid")
+    df["Payment Type"] = df["Payment Method"].apply(
+        lambda x: "COD" if "COD" in str(x) else "Prepaid"
+    )
     
+    # Use existing hashed customer phone as Customer ID
     if "Customer Phone" in df.columns:
         df["Customer ID"] = df["Customer Phone"].apply(lambda x: str(x).split('|')[0] if pd.notna(x) else "Unknown")
     elif "Customer Name" in df.columns:
         df["Customer ID"] = df["Customer Name"].apply(hash_customer_name)
     
+    # Add city tier classification based on pincode
     if "Billing Pincode" in df.columns:
         df["City Tier"] = df["Billing Pincode"].apply(get_city_tier)
     elif "Shipping Pincode" in df.columns:
@@ -460,18 +428,13 @@ if uploaded_file:
     else:
         df["City Tier"] = "Unknown"
     
+    # Map UTM sources to platforms
     if "Utm Source" in df.columns:
         df["UTM Platform"] = df["Utm Source"].apply(map_utm_source)
 
-    new_records, net_added = save_data(df)
-    
+    save_data(df)
     with st.sidebar:
-        if net_added > 0:
-            st.success(f"✅ Added {net_added:,} new orders!")
-            st.info(f"📊 Uploaded: {new_records:,} records")
-        else:
-            st.warning("⚠️ No new orders (all duplicates)")
-            st.info(f"📊 Uploaded: {new_records:,} records")
+        st.success("✅ File uploaded successfully")
 
 # ---------------- LOAD DATA ----------------
 if not uploaded_file:
@@ -488,12 +451,25 @@ if "Order Date" not in df.columns:
 if "UTM Platform" in df.columns:
     st.markdown('<div class="section-header">🎯 Quick Platform Filters</div>', unsafe_allow_html=True)
     
+    # Get platform counts
     platform_counts = df["UTM Platform"].value_counts().to_dict()
-    cols = st.columns(8)
-    platforms = ['Meta', 'Google', 'Organic', 'Email', 'WhatsApp', 'Twitter', 'LinkedIn', 'Other']
-    platform_icons = {'Meta': '📱', 'Google': '🔍', 'Organic': '🌱', 'Email': '📧', 
-                     'WhatsApp': '💬', 'Twitter': '🐦', 'LinkedIn': '💼', 'Other': '🔗'}
     
+    # Create filter buttons in columns
+    cols = st.columns(8)
+    
+    platforms = ['Meta', 'Google', 'Organic', 'Email', 'WhatsApp', 'Twitter', 'LinkedIn', 'Other']
+    platform_icons = {
+        'Meta': '📱',
+        'Google': '🔍',
+        'Organic': '🌱',
+        'Email': '📧',
+        'WhatsApp': '💬',
+        'Twitter': '🐦',
+        'LinkedIn': '💼',
+        'Other': '🔗'
+    }
+    
+    # Initialize session state
     if 'selected_platform' not in st.session_state:
         st.session_state.selected_platform = None
     
@@ -501,59 +477,111 @@ if "UTM Platform" in df.columns:
         with cols[idx]:
             count = platform_counts.get(platform, 0)
             if st.button(f"{platform_icons.get(platform, '•')} {platform}\n({count:,})", 
-                       key=f"btn_{platform}", use_container_width=True):
+                       key=f"btn_{platform}",
+                       use_container_width=True):
                 st.session_state.selected_platform = platform
                 st.rerun()
 
 # ---------------- SIDEBAR FILTERS ----------------
 with st.sidebar:
     st.markdown("### 🔍 Filters")
+    
+    # Ensure valid dates exist
     valid_dates = df[df["Order Date"].notna()]
+    
     if len(valid_dates) == 0:
-        st.error("No valid dates found")
+        st.error("No valid dates found in data")
         st.stop()
     
     min_date = valid_dates["Order Date"].min().date()
     max_date = valid_dates["Order Date"].max().date()
-    date_range = st.date_input("Date Range", [min_date, max_date], min_value=min_date, max_value=max_date)
+    
+    date_range = st.date_input(
+        "Date Range",
+        [min_date, max_date],
+        min_value=min_date,
+        max_value=max_date
+    )
     
     status_options = df["Status"].unique().tolist()
-    status_filter = st.multiselect("Order Status", status_options, default=status_options)
-    payment_filter = st.multiselect("Payment Type", ["Prepaid", "COD"], default=["Prepaid", "COD"])
+    status_filter = st.multiselect(
+        "Order Status",
+        status_options,
+        default=status_options
+    )
     
+    payment_filter = st.multiselect(
+        "Payment Type",
+        ["Prepaid", "COD"],
+        default=["Prepaid", "COD"]
+    )
+    
+    # City Tier filter
     if "City Tier" in df.columns:
-        tier_filter = st.multiselect("City Tier", ["Tier 1", "Tier 2", "Tier 3"], default=["Tier 1", "Tier 2", "Tier 3"])
+        tier_filter = st.multiselect(
+            "City Tier",
+            ["Tier 1", "Tier 2", "Tier 3"],
+            default=["Tier 1", "Tier 2", "Tier 3"]
+        )
     else:
         tier_filter = []
     
+    # Platform filter (mapped UTM sources)
     if "UTM Platform" in df.columns:
         platforms = df["UTM Platform"].unique().tolist()
+        
+        # Set default based on session state
         if 'selected_platform' in st.session_state and st.session_state.selected_platform:
             default_platforms = [st.session_state.selected_platform]
         else:
             default_platforms = platforms
-        platform_filter = st.multiselect("Platform (UTM)", platforms, default=default_platforms)
+        
+        platform_filter = st.multiselect(
+            "Platform (UTM)",
+            platforms,
+            default=default_platforms
+        )
     else:
         platform_filter = []
     
+    # UTM Source filter
     if "Utm Source" in df.columns:
         utm_sources = df["Utm Source"].dropna().unique().tolist()
-        utm_filter = st.multiselect("UTM Source", utm_sources, default=utm_sources) if utm_sources else []
+        if utm_sources:
+            utm_filter = st.multiselect(
+                "UTM Source",
+                utm_sources,
+                default=utm_sources
+            )
+        else:
+            utm_filter = []
     else:
         utm_filter = []
     
+    # Campaign filter
     if "Utm Campaign" in df.columns:
         campaigns = df["Utm Campaign"].dropna().unique().tolist()
         if campaigns and len(campaigns) < 50:
-            campaign_filter = st.multiselect("Campaign", campaigns, default=campaigns[:10] if len(campaigns) > 10 else campaigns)
+            campaign_filter = st.multiselect(
+                "Campaign",
+                campaigns,
+                default=campaigns[:10] if len(campaigns) > 10 else campaigns
+            )
         else:
             campaign_filter = campaigns if campaigns else []
     else:
         campaign_filter = []
     
     st.markdown("---")
+    
+    # Drill-down level selector
     st.markdown("### 📅 Time Granularity")
-    time_grain = st.selectbox("Select View", ["Daily", "Weekly", "Monthly", "Yearly"], index=0)
+    time_grain = st.selectbox(
+        "Select View",
+        ["Daily", "Weekly", "Monthly", "Yearly"],
+        index=0
+    )
+    
     st.markdown("---")
     st.markdown("### 📊 Dashboard Info")
     st.info(f"**Last Updated:** {datetime.now().strftime('%d %b %Y, %I:%M %p')}")
@@ -566,12 +594,18 @@ filtered = df[
     (df["Payment Type"].isin(payment_filter))
 ]
 
+# Apply City Tier filter
 if tier_filter and "City Tier" in filtered.columns:
     filtered = filtered[filtered["City Tier"].isin(tier_filter)]
+
+# Apply Platform filter
 if platform_filter and "UTM Platform" in filtered.columns:
     filtered = filtered[filtered["UTM Platform"].isin(platform_filter)]
+
+# Apply UTM filters if available
 if utm_filter and "Utm Source" in filtered.columns:
     filtered = filtered[filtered["Utm Source"].isin(utm_filter)]
+
 if campaign_filter and "Utm Campaign" in filtered.columns:
     filtered = filtered[filtered["Utm Campaign"].isin(campaign_filter)]
 
@@ -585,24 +619,781 @@ total_revenue = filtered["Grand Total"].sum()
 avg_order_value = filtered["Grand Total"].mean()
 prepaid_orders = filtered[filtered["Payment Type"] == "Prepaid"].shape[0]
 cod_orders = filtered[filtered["Payment Type"] == "COD"].shape[0]
+
+# Calculate Payment Success Ratio
 confirmed_orders = filtered[filtered["Status"].str.contains("Confirmed|Delivered|Shipped", case=False, na=False)].shape[0]
 total_transactions = len(filtered)
 payment_success_ratio = (confirmed_orders / total_transactions * 100) if total_transactions > 0 else 0
 
 with col1:
     st.markdown(create_metric_card("Total Orders", f"{total_orders:,}"), unsafe_allow_html=True)
+
 with col2:
     st.markdown(create_metric_card("Total Revenue", f"₹{total_revenue:,.0f}"), unsafe_allow_html=True)
+
 with col3:
     st.markdown(create_metric_card("Avg Order Value", f"₹{avg_order_value:,.0f}"), unsafe_allow_html=True)
+
 with col4:
     st.markdown(create_metric_card("Prepaid Orders", f"{prepaid_orders:,}"), unsafe_allow_html=True)
+
 with col5:
     st.markdown(create_metric_card("COD Orders", f"{cod_orders:,}"), unsafe_allow_html=True)
+
 with col6:
     st.markdown(create_metric_card("Payment Success", f"{payment_success_ratio:.1f}%"), unsafe_allow_html=True)
 
-# ---------------- Continue with rest of dashboard... ----------------
+# ---------------- ROW 1: TRENDS WITH DRILL-DOWN ----------------
+st.markdown('<div class="section-header">📊 Revenue & Order Trends</div>', unsafe_allow_html=True)
+
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    # Dynamic revenue and orders trend based on time granularity
+    if time_grain == "Daily":
+        daily = filtered.groupby(filtered["Order Date"].dt.date).agg({
+            "Grand Total": "sum",
+            "Order Number": "count"
+        }).reset_index()
+        daily.columns = ["Date", "Revenue", "Orders"]
+        x_data = daily["Date"]
+        title_text = "Daily Revenue & Orders"
+    elif time_grain == "Weekly":
+        filtered["Week"] = filtered["Order Date"].dt.to_period('W').dt.start_time
+        daily = filtered.groupby("Week").agg({
+            "Grand Total": "sum",
+            "Order Number": "count"
+        }).reset_index()
+        daily.columns = ["Date", "Revenue", "Orders"]
+        x_data = daily["Date"]
+        title_text = "Weekly Revenue & Orders"
+    elif time_grain == "Monthly":
+        filtered["Month"] = filtered["Order Date"].dt.to_period('M').dt.start_time
+        daily = filtered.groupby("Month").agg({
+            "Grand Total": "sum",
+            "Order Number": "count"
+        }).reset_index()
+        daily.columns = ["Date", "Revenue", "Orders"]
+        x_data = daily["Date"]
+        title_text = "Monthly Revenue & Orders"
+    else:  # Yearly
+        filtered["Year"] = filtered["Order Date"].dt.year
+        daily = filtered.groupby("Year").agg({
+            "Grand Total": "sum",
+            "Order Number": "count"
+        }).reset_index()
+        daily.columns = ["Date", "Revenue", "Orders"]
+        x_data = daily["Date"]
+        title_text = "Yearly Revenue & Orders"
+    
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    fig.add_trace(
+        go.Scatter(
+            x=x_data, 
+            y=daily["Revenue"],
+            name="Revenue",
+            line=dict(color='#667eea', width=3),
+            fill='tozeroy',
+            fillcolor='rgba(102, 126, 234, 0.1)'
+        ),
+        secondary_y=False
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=x_data, 
+            y=daily["Orders"],
+            name="Orders",
+            line=dict(color='#f093fb', width=2, dash='dot'),
+        ),
+        secondary_y=True
+    )
+    
+    fig.update_layout(
+        title=dict(text=title_text, font=dict(size=16, color='#1a1a1a', family="Arial, sans-serif")),
+        height=400,
+        hovermode='x unified',
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
+        margin=dict(l=60, r=60, t=60, b=60)
+    )
+    
+    fig.update_xaxes(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
+    fig.update_yaxes(showgrid=True, gridcolor='#f0f0f0', secondary_y=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
+    fig.update_yaxes(showgrid=False, secondary_y=True, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # Payment method split
+    payment_split = filtered.groupby("Payment Type").agg({
+        "Order Number": "count",
+        "Grand Total": "sum"
+    }).reset_index()
+    
+    fig = go.Figure(data=[go.Pie(
+        labels=payment_split["Payment Type"],
+        values=payment_split["Order Number"],
+        hole=0.5,
+        marker=dict(colors=['#4facfe', '#f093fb']),
+        textinfo='label+percent+value',
+        textfont_size=16,
+        textfont_color='white',
+        textposition='inside'
+    )])
+    
+    fig.update_layout(
+        title=dict(text="Payment Split", font=dict(size=16, color='#1a1a1a', family="Arial, sans-serif")),
+        height=400,
+        showlegend=False,
+        paper_bgcolor='white',
+        font=dict(family="Arial, sans-serif", size=14, color='#1a1a1a'),
+        margin=dict(l=20, r=20, t=60, b=20)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- ROW 2: MAP & TIER ANALYSIS ----------------
+st.markdown('<div class="section-header">🗺️ Geographic Analysis & City Tiers</div>', unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # India Map with state-wise orders
+    if "Billing State" in filtered.columns:
+        state_data = filtered.groupby("Billing State").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        state_data.columns = ["State", "Orders", "Revenue"]
+        
+        # Map state names to standard format for better visualization
+        state_data["State_Clean"] = state_data["State"].str.title().str.strip()
+        
+        # Create India map using scatter geo
+        fig = go.Figure()
+        
+        # Add state data as markers (India states)
+        fig.add_trace(go.Scattergeo(
+            lon=[77.1025, 72.8777, 88.3639, 80.2707, 78.4867, 75.7139, 85.3240, 
+                 76.2711, 73.8567, 74.7973, 78.9629, 79.0193, 93.9368, 91.8933,
+                 83.9956, 70.8022, 92.9376, 76.6413, 84.8536, 75.5762, 73.0169,
+                 77.5946, 74.6239, 91.2868, 73.1812, 81.6296, 85.8245, 74.4977,
+                 93.7170, 84.6897, 72.5714, 76.7794, 77.4126, 72.8826],
+            lat=[28.7041, 19.0760, 22.5726, 13.0827, 17.3850, 19.0760, 25.0961,
+                 9.9312, 18.5204, 34.0837, 30.7333, 21.1702, 24.6637, 26.2006,
+                 27.0974, 22.2587, 25.4670, 12.2958, 26.8467, 31.1471, 26.0289,
+                 23.2599, 15.2993, 25.4358, 19.0330, 16.5062, 20.9517, 26.8467,
+                 26.1584, 27.0238, 21.7679, 24.5854, 28.4089, 23.0225],
+            text=state_data["State_Clean"],
+            marker=dict(
+                size=state_data["Orders"].values / state_data["Orders"].max() * 50 + 10,
+                color=state_data["Orders"].values,
+                colorscale='Blues',
+                showscale=True,
+                colorbar=dict(
+                    title="Orders",
+                    x=1.1
+                ),
+                line=dict(width=1, color='white'),
+                sizemode='diameter'
+            ),
+            hovertemplate='<b>%{text}</b><br>' +
+                         'Orders: %{marker.color:,.0f}<br>' +
+                         '<extra></extra>',
+            showlegend=False
+        ))
+        
+        fig.update_geos(
+            visible=True,
+            resolution=50,
+            scope="asia",
+            showcountries=True,
+            countrycolor="lightgray",
+            showsubunits=True,
+            subunitcolor="white",
+            lonaxis_range=[68, 97],
+            lataxis_range=[8, 35],
+            bgcolor='rgba(240,240,240,0.3)',
+            projection_type="mercator"
+        )
+        
+        fig.update_layout(
+            title=dict(
+                text="State-wise Order Distribution (India Map)", 
+                font=dict(size=16, color='#1a1a1a')
+            ),
+            height=400,
+            paper_bgcolor='white',
+            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
+            margin=dict(l=20, r=20, t=60, b=20)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # City Tier Analysis
+    if "City Tier" in filtered.columns:
+        tier_data = filtered.groupby("City Tier").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        tier_data.columns = ["Tier", "Orders", "Revenue"]
+        tier_data["AOV"] = tier_data["Revenue"] / tier_data["Orders"]
+        
+        # Sort by tier
+        tier_order = ["Tier 1", "Tier 2", "Tier 3"]
+        tier_data["Tier"] = pd.Categorical(tier_data["Tier"], categories=tier_order, ordered=True)
+        tier_data = tier_data.sort_values("Tier")
+        
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        fig.add_trace(
+            go.Bar(
+                x=tier_data["Tier"],
+                y=tier_data["Orders"],
+                name="Orders",
+                marker=dict(color=['#667eea', '#764ba2', '#f093fb']),
+                text=tier_data["Orders"],
+                textposition='outside'
+            ),
+            secondary_y=False
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=tier_data["Tier"],
+                y=tier_data["AOV"],
+                name="AOV",
+                mode='lines+markers',
+                marker=dict(color='#fee140', size=12),
+                line=dict(color='#fee140', width=3)
+            ),
+            secondary_y=True
+        )
+        
+        fig.update_layout(
+            title=dict(text="City Tier Performance", font=dict(size=16, color='#1a1a1a')),
+            height=400,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, title="City Tier", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="AOV (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
+            margin=dict(l=60, r=60, t=60, b=60),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- ROW 3: TOP 10 WITH TOGGLE ----------------
+st.markdown('<div class="section-header">🏆 Top 10 States Performance</div>', unsafe_allow_html=True)
+
+if "Billing State" in filtered.columns:
+    col1, col2 = st.columns([3, 1])
+    
+    with col2:
+        top10_metric = st.radio(
+            "Select Metric",
+            ["Orders", "Revenue"],
+            horizontal=True
+        )
+    
+    with col1:
+        state_data = filtered.groupby("Billing State").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        state_data.columns = ["State", "Orders", "Revenue"]
+        
+        if top10_metric == "Orders":
+            state_data = state_data.sort_values("Orders", ascending=True).tail(10)
+            y_data = state_data["Orders"]
+            color_data = state_data["Orders"]
+            title_text = "Top 10 States by Orders"
+            text_data = state_data["Orders"]
+        else:
+            state_data = state_data.sort_values("Revenue", ascending=True).tail(10)
+            y_data = state_data["Revenue"]
+            color_data = state_data["Revenue"]
+            title_text = "Top 10 States by Revenue"
+            text_data = [f"₹{x:,.0f}" for x in state_data["Revenue"]]
+        
+        fig = go.Figure(go.Bar(
+            x=y_data,
+            y=state_data["State"],
+            orientation='h',
+            marker=dict(
+                color=color_data,
+                colorscale='Viridis',
+                showscale=False
+            ),
+            text=text_data,
+            textposition='outside'
+        ))
+        
+        fig.update_layout(
+            title=dict(text=title_text, font=dict(size=16, color='#1a1a1a')),
+            height=400,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
+            margin=dict(l=60, r=60, t=60, b=60)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- ROW 4: UTM SOURCE & CAMPAIGN ANALYSIS ----------------
+st.markdown('<div class="section-header">📱 Marketing Performance Analysis</div>', unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # UTM Source analysis
+    if "Utm Source" in filtered.columns:
+        utm_data = filtered.groupby("Utm Source").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        utm_data.columns = ["Source", "Orders", "Revenue"]
+        utm_data = utm_data.sort_values("Orders", ascending=False).head(10)
+        utm_data["AOV"] = utm_data["Revenue"] / utm_data["Orders"]
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=utm_data["Source"],
+            y=utm_data["Orders"],
+            name="Orders",
+            marker=dict(color='#667eea'),
+            text=utm_data["Orders"],
+            textposition='outside',
+            yaxis='y'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=utm_data["Source"],
+            y=utm_data["AOV"],
+            name="AOV",
+            mode='lines+markers',
+            marker=dict(color='#f093fb', size=10),
+            line=dict(color='#f093fb', width=3),
+            yaxis='y2'
+        ))
+        
+        fig.update_layout(
+            title=dict(text="UTM Source Performance: Orders & AOV", font=dict(size=16, color='#1a1a1a')),
+            height=400,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, title="Source", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="AOV (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
+            margin=dict(l=60, r=60, t=60, b=60),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # Campaign analysis
+    if "Utm Campaign" in filtered.columns:
+        campaign_data = filtered.groupby("Utm Campaign").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        campaign_data.columns = ["Campaign", "Orders", "Revenue"]
+        campaign_data = campaign_data.sort_values("Revenue", ascending=True).tail(10)
+        
+        fig = go.Figure(go.Bar(
+            x=campaign_data["Revenue"],
+            y=campaign_data["Campaign"],
+            orientation='h',
+            marker=dict(
+                color=campaign_data["Revenue"],
+                colorscale='Sunset',
+                showscale=False
+            ),
+            text=[f"₹{x:,.0f}" for x in campaign_data["Revenue"]],
+            textposition='outside'
+        ))
+        
+        fig.update_layout(
+            title=dict(text="Top 10 Campaigns by Revenue", font=dict(size=16, color='#1a1a1a')),
+            height=400,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Revenue (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=False, title="", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
+            margin=dict(l=60, r=60, t=60, b=60)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- ROW 5: RFM ANALYSIS ----------------
+st.markdown('<div class="section-header">🎯 RFM Analysis (Recency, Frequency, Monetary)</div>', unsafe_allow_html=True)
+
+if "Customer ID" in filtered.columns:
+    # Calculate RFM metrics
+    current_date = filtered["Order Date"].max()
+    
+    rfm_data = filtered.groupby("Customer ID").agg({
+        "Order Date": lambda x: (current_date - x.max()).days,  # Recency
+        "Order Number": "count",  # Frequency
+        "Grand Total": "sum"  # Monetary
+    }).reset_index()
+    
+    rfm_data.columns = ["Customer ID", "Recency", "Frequency", "Monetary"]
+    
+    # Calculate RFM scores (1-5 scale) with robust error handling
+    def calculate_score(data, column, ascending=True):
+        """Calculate score with proper bin handling"""
+        try:
+            unique_values = data[column].nunique()
+            if unique_values <= 1:
+                return pd.Series([3] * len(data), index=data.index)
+            
+            n_bins = min(5, unique_values)
+            if ascending:
+                labels = list(range(1, n_bins + 1))
+            else:
+                labels = list(range(n_bins, 0, -1))
+            
+            # Try qcut first
+            if column == "Frequency":
+                return pd.qcut(data[column].rank(method='first'), n_bins, labels=labels, duplicates='drop')
+            else:
+                return pd.qcut(data[column], n_bins, labels=labels, duplicates='drop')
+        except:
+            # Fallback to cut if qcut fails
+            try:
+                if column == "Frequency":
+                    return pd.cut(data[column].rank(method='first'), n_bins, labels=labels, duplicates='drop')
+                else:
+                    return pd.cut(data[column], n_bins, labels=labels, duplicates='drop')
+            except:
+                # Final fallback: use rank-based binning
+                ranks = data[column].rank(method='first', pct=True)
+                if ascending:
+                    return pd.cut(ranks, bins=5, labels=[1, 2, 3, 4, 5])
+                else:
+                    return pd.cut(ranks, bins=5, labels=[5, 4, 3, 2, 1])
+    
+    rfm_data["R_Score"] = calculate_score(rfm_data, "Recency", ascending=False)
+    rfm_data["F_Score"] = calculate_score(rfm_data, "Frequency", ascending=True)
+    rfm_data["M_Score"] = calculate_score(rfm_data, "Monetary", ascending=True)
+    
+    rfm_data["RFM_Score"] = rfm_data["R_Score"].astype(str) + rfm_data["F_Score"].astype(str) + rfm_data["M_Score"].astype(str)
+    rfm_data["RFM_Total"] = rfm_data["R_Score"].astype(int) + rfm_data["F_Score"].astype(int) + rfm_data["M_Score"].astype(int)
+    
+    # Segment customers
+    def segment_customer(score):
+        if score >= 13:
+            return "Champions"
+        elif score >= 11:
+            return "Loyal"
+        elif score >= 9:
+            return "Potential"
+        elif score >= 7:
+            return "At Risk"
+        else:
+            return "Lost"
+    
+    rfm_data["Segment"] = rfm_data["RFM_Total"].apply(segment_customer)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # RFM Segment Distribution
+        segment_counts = rfm_data["Segment"].value_counts().reset_index()
+        segment_counts.columns = ["Segment", "Customers"]
+        
+        color_map = {
+            "Champions": "#43e97b",
+            "Loyal": "#30cfd0",
+            "Potential": "#fee140",
+            "At Risk": "#fa709a",
+            "Lost": "#f093fb"
+        }
+        
+        colors = [color_map.get(seg, "#667eea") for seg in segment_counts["Segment"]]
+        
+        fig = go.Figure(data=[go.Bar(
+            x=segment_counts["Segment"],
+            y=segment_counts["Customers"],
+            marker=dict(color=colors),
+            text=segment_counts["Customers"],
+            textposition='outside'
+        )])
+        
+        fig.update_layout(
+            title=dict(text="Customer Segmentation (RFM)", font=dict(size=15, color='#1a1a1a')),
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Customers", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        # Recency Distribution
+        fig = go.Figure(data=[go.Histogram(
+            x=rfm_data["Recency"],
+            nbinsx=30,
+            marker=dict(
+                color='#667eea',
+                line=dict(color='white', width=1)
+            )
+        )])
+        
+        fig.update_layout(
+            title=dict(text="Recency Distribution (Days)", font=dict(size=15, color='#1a1a1a')),
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(title="Days Since Last Order", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(title="Customers", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col3:
+        # Frequency vs Monetary scatter
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatter(
+            x=rfm_data["Frequency"],
+            y=rfm_data["Monetary"],
+            mode='markers',
+            marker=dict(
+                size=rfm_data["RFM_Total"] * 2,
+                color=rfm_data["RFM_Total"],
+                colorscale='Viridis',
+                showscale=True,
+                colorbar=dict(title="RFM Score"),
+                line=dict(color='white', width=0.5)
+            ),
+            text=rfm_data["Customer ID"],
+            hovertemplate='<b>%{text}</b><br>Orders: %{x}<br>Revenue: ₹%{y:,.0f}<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            title=dict(text="Frequency vs Monetary Value", font=dict(size=15, color='#1a1a1a')),
+            height=350,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Frequency (Orders)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Monetary (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
+            margin=dict(l=50, r=50, t=50, b=50)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- ROW 6: TOP 15 CUSTOMERS (HASHED) ----------------
+st.markdown('<div class="section-header">👥 Top 15 Customers by Lifetime Value</div>', unsafe_allow_html=True)
+
+if "Customer ID" in filtered.columns:
+    clv_data = df.groupby("Customer ID").agg({
+        "Order Number": "count",
+        "Grand Total": "sum",
+        "Order Date": ["min", "max"]
+    }).reset_index()
+    
+    clv_data.columns = ["Customer ID", "Total Orders", "Total Revenue", "First Order", "Last Order"]
+    clv_data = clv_data.sort_values("Total Revenue", ascending=False).head(15)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        fig = go.Figure()
+        
+        fig.add_trace(go.Bar(
+            x=clv_data["Customer ID"],
+            y=clv_data["Total Revenue"],
+            name="Total Revenue",
+            marker=dict(color='#667eea'),
+            text=[f"₹{x:,.0f}" for x in clv_data["Total Revenue"]],
+            textposition='outside',
+            yaxis='y'
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=clv_data["Customer ID"],
+            y=clv_data["Total Orders"],
+            name="Orders",
+            mode='lines+markers',
+            marker=dict(color='#f093fb', size=10),
+            line=dict(color='#f093fb', width=3),
+            yaxis='y2'
+        ))
+        
+        fig.update_layout(
+            title=dict(text="Top 15 Customers: Revenue & Orders", font=dict(size=16, color='#1a1a1a')),
+            height=400,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, tickangle=-45, title="Customer ID (Hashed)", tickfont=dict(color='#1a1a1a', size=9), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="Total Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
+            margin=dict(l=60, r=60, t=60, b=120),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        # Display table with hashed customer IDs
+        display_clv = clv_data[["Customer ID", "Total Orders", "Total Revenue"]].copy()
+        display_clv["Total Revenue"] = display_clv["Total Revenue"].apply(lambda x: f"₹{x:,.0f}")
+        
+        st.dataframe(
+            display_clv,
+            use_container_width=True,
+            height=400,
+            hide_index=True
+        )
+
+# ---------------- ROW 7: PRODUCTS & PAYMENT MIX ----------------
+st.markdown('<div class="section-header">🛍️ Product Analysis</div>', unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # Top products
+    if "Product Name" in filtered.columns:
+        product_data = filtered.groupby("Product Name").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        product_data.columns = ["Product", "Orders", "Revenue"]
+        product_data = product_data.sort_values("Orders", ascending=False).head(10)
+        
+        fig = go.Figure(data=[
+            go.Bar(
+                x=product_data["Product"],
+                y=product_data["Orders"],
+                marker=dict(
+                    color=product_data["Revenue"],
+                    colorscale='Viridis',
+                    showscale=True,
+                    colorbar=dict(title="Revenue (₹)")
+                ),
+                text=product_data["Orders"],
+                textposition='outside'
+            )
+        ])
+        
+        fig.update_layout(
+            title=dict(text="Top 10 Products by Orders", font=dict(size=16, color='#1a1a1a')),
+            height=400,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
+            margin=dict(l=60, r=60, t=60, b=100)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # Product-wise payment split
+    if "Product Name" in filtered.columns:
+        product_payment = filtered.groupby(["Product Name", "Payment Type"]).agg({
+            "Order Number": "count"
+        }).reset_index()
+        
+        top_products = filtered.groupby("Product Name")["Order Number"].count().nlargest(8).index.tolist()
+        product_payment = product_payment[product_payment["Product Name"].isin(top_products)]
+        
+        fig = go.Figure()
+        
+        for payment_type in ["Prepaid", "COD"]:
+            data = product_payment[product_payment["Payment Type"] == payment_type]
+            fig.add_trace(go.Bar(
+                name=payment_type,
+                x=data["Product Name"],
+                y=data["Order Number"],
+                marker=dict(color='#4facfe' if payment_type == "Prepaid" else '#f093fb')
+            ))
+        
+        fig.update_layout(
+            title=dict(text="Product-wise Payment Split (Top 8)", font=dict(size=16, color='#1a1a1a')),
+            height=400,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            barmode='stack',
+            xaxis=dict(showgrid=False, tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
+            margin=dict(l=60, r=60, t=60, b=100),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+
+# ---------------- DATA TABLE ----------------
+st.markdown('<div class="section-header">📋 Detailed Order Data</div>', unsafe_allow_html=True)
+
+display_cols = [
+    "Order Number", "Order Date", "Status", "Payment Method", 
+    "Grand Total", "Customer ID", "Billing State", "Billing City", 
+    "Billing Pincode", "City Tier", "Product Name", "Utm Source", "Utm Campaign"
+]
+display_cols = [col for col in display_cols if col in filtered.columns]
+
+st.dataframe(
+    filtered[display_cols].style.format({
+        "Grand Total": "₹{:,.0f}",
+        "Order Date": lambda x: x.strftime("%d %b %Y") if pd.notnull(x) else ""
+    }),
+    use_container_width=True,
+    height=400
+)
+
+# ---------------- DOWNLOAD ----------------
+st.markdown('<div class="section-header">⬇️ Export Data</div>', unsafe_allow_html=True)
+
+col1, col2, col3 = st.columns([1, 1, 2])
+
+with col1:
+    st.download_button(
+        "📥 Download CSV",
+        filtered.drop(columns=["__last_updated__"], errors='ignore').to_csv(index=False),
+        file_name=f"gokwik_data_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+with col2:
+    st.download_button(
+        "📊 Download Excel",
+        filtered.drop(columns=["__last_updated__"], errors='ignore').to_csv(index=False),
+        file_name=f"gokwik_data_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+
+# Footer
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 20px;">
