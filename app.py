@@ -591,7 +591,7 @@ with col2:
 # ---------------- ROW 2: MAP & TIER ANALYSIS ----------------
 st.markdown('<div class="section-header">🗺️ Geographic Analysis & City Tiers</div>', unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 0.001])
 
 with col1:
     if "Billing State" in filtered.columns:
@@ -767,7 +767,7 @@ if "Billing State" in filtered.columns:
 # ---------------- ROW 4: UTM CONTENT & CAMPAIGN ANALYSIS ----------------
 st.markdown('<div class="section-header">📱 Marketing Performance Analysis</div>', unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 0.001])
 
 with col1:
     if "Utm Content" in filtered.columns:
@@ -866,35 +866,7 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    if "Utm Campaign" in filtered.columns:
-        campaign_data = filtered.groupby("Utm Campaign").agg({
-            "Order Number": "count",
-            "Grand Total": "sum"
-        }).reset_index()
-        campaign_data.columns = ["Campaign", "Orders", "Revenue"]
-        campaign_data = campaign_data.sort_values("Revenue", ascending=True).tail(10)
-        
-        fig = go.Figure(go.Bar(
-            x=campaign_data["Revenue"],
-            y=campaign_data["Campaign"],
-            orientation='h',
-            marker=dict(color=campaign_data["Revenue"], colorscale='Sunset', showscale=False),
-            text=[f"₹{x:,.0f}" for x in campaign_data["Revenue"]],
-            textposition='outside'
-        ))
-        
-        fig.update_layout(
-            title=dict(text="Top 10 Campaigns by Revenue", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Revenue (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=False, title="", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=60)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+    pass
 
 # ---------------- ROW 5: RFM ANALYSIS ----------------
 st.markdown('<div class="section-header">🎯 RFM Analysis (Recency, Frequency, Monetary)</div>', unsafe_allow_html=True)
@@ -1062,7 +1034,7 @@ if "Customer ID" in filtered.columns:
     clv_data.columns = ["Customer ID", "Total Orders", "Total Revenue", "First Order", "Last Order"]
     clv_data = clv_data.sort_values("Total Revenue", ascending=False).head(15)
     
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns([1, 0.001])
     
     with col1:
         fig = go.Figure()
@@ -1112,7 +1084,7 @@ if "Customer ID" in filtered.columns:
 # ---------------- ROW 7: PRODUCTS & PAYMENT MIX ----------------
 st.markdown('<div class="section-header">🛍️ Product Analysis</div>', unsafe_allow_html=True)
 
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 0.001])
 
 with col1:
     if "Product Name" in filtered.columns:
