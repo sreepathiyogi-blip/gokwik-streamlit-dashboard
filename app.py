@@ -816,10 +816,34 @@ if "Customer ID" in filtered.columns:
     
     rfm_data.columns = ["Customer ID", "Recency", "Frequency", "Monetary"]
     
-    # Calculate RFM scores (1-5 scale)
-    rfm_data["R_Score"] = pd.qcut(rfm_data["Recency"], 5, labels=[5, 4, 3, 2, 1], duplicates='drop')
-    rfm_data["F_Score"] = pd.qcut(rfm_data["Frequency"].rank(method='first'), 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
-    rfm_data["M_Score"] = pd.qcut(rfm_data["Monetary"], 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
+    # Calculate RFM scores (1-5 scale) with error handling
+    try:
+        rfm_data["R_Score"] = pd.qcut(rfm_data["Recency"], 5, labels=[5, 4, 3, 2, 1], duplicates='drop')
+    except ValueError:
+        # If not enough unique values, use fewer bins
+        n_bins = min(5, rfm_data["Recency"].nunique())
+        if n_bins > 1:
+            rfm_data["R_Score"] = pd.qcut(rfm_data["Recency"], n_bins, labels=range(n_bins, 0, -1), duplicates='drop')
+        else:
+            rfm_data["R_Score"] = 3
+    
+    try:
+        rfm_data["F_Score"] = pd.qcut(rfm_data["Frequency"].rank(method='first'), 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
+    except ValueError:
+        n_bins = min(5, rfm_data["Frequency"].nunique())
+        if n_bins > 1:
+            rfm_data["F_Score"] = pd.qcut(rfm_data["Frequency"].rank(method='first'), n_bins, labels=range(1, n_bins + 1), duplicates='drop')
+        else:
+            rfm_data["F_Score"] = 3
+    
+    try:
+        rfm_data["M_Score"] = pd.qcut(rfm_data["Monetary"], 5, labels=[1, 2, 3, 4, 5], duplicates='drop')
+    except ValueError:
+        n_bins = min(5, rfm_data["Monetary"].nunique())
+        if n_bins > 1:
+            rfm_data["M_Score"] = pd.qcut(rfm_data["Monetary"], n_bins, labels=range(1, n_bins + 1), duplicates='drop')
+        else:
+            rfm_data["M_Score"] = 3
     
     rfm_data["RFM_Score"] = rfm_data["R_Score"].astype(str) + rfm_data["F_Score"].astype(str) + rfm_data["M_Score"].astype(str)
     rfm_data["RFM_Total"] = rfm_data["R_Score"].astype(int) + rfm_data["F_Score"].astype(int) + rfm_data["M_Score"].astype(int)
