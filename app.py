@@ -644,59 +644,114 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
+    # State coordinates mapping
+    state_coords = {
+        'ANDHRA PRADESH': (15.9129, 79.74),
+        'ARUNACHAL PRADESH': (28.218, 94.7278),
+        'ASSAM': (26.2006, 92.9376),
+        'BIHAR': (25.0961, 85.3131),
+        'CHHATTISGARH': (21.2787, 81.8661),
+        'GOA': (15.2993, 74.124),
+        'GUJARAT': (22.2587, 71.1924),
+        'HARYANA': (29.0588, 76.0856),
+        'HIMACHAL PRADESH': (31.1048, 77.1734),
+        'JHARKHAND': (23.6102, 85.2799),
+        'KARNATAKA': (15.3173, 75.7139),
+        'KERALA': (10.8505, 76.2711),
+        'MADHYA PRADESH': (22.9734, 78.6569),
+        'MAHARASHTRA': (19.7515, 75.7139),
+        'MANIPUR': (24.6637, 93.9063),
+        'MEGHALAYA': (25.467, 91.3662),
+        'MIZORAM': (23.1645, 92.9376),
+        'NAGALAND': (26.1584, 94.5624),
+        'ODISHA': (20.9517, 85.0985),
+        'PUNJAB': (31.1471, 75.3412),
+        'RAJASTHAN': (27.0238, 74.2179),
+        'SIKKIM': (27.533, 88.5122),
+        'TAMIL NADU': (11.1271, 78.6569),
+        'TELANGANA': (18.1124, 79.0193),
+        'TRIPURA': (23.9408, 91.9882),
+        'UTTAR PRADESH': (26.8467, 80.9462),
+        'UTTARAKHAND': (30.0668, 79.0193),
+        'WEST BENGAL': (22.9868, 87.855),
+        'DELHI': (28.7041, 77.1025),
+        'JAMMU AND KASHMIR': (33.7782, 76.5762),
+        'LADAKH': (34.1526, 77.577),
+        'PUDUCHERRY': (11.9416, 79.8083),
+        'CHANDIGARH': (30.7333, 76.7794),
+        'DADRA AND NAGAR HAVELI': (20.1809, 73.0169),
+        'DAMAN AND DIU': (20.4283, 72.8397),
+        'LAKSHADWEEP': (10.5667, 72.6417),
+        'ANDAMAN AND NICOBAR': (11.7401, 92.6586)
+    }
+    
     if "City Tier" in filtered.columns:
-        tier_data = filtered.groupby("City Tier").agg({
-            "Order Number": "count",
-            "Grand Total": "sum"
-        }).reset_index()
-        tier_data.columns = ["Tier", "Orders", "Revenue"]
-        tier_data["AOV"] = tier_data["Revenue"] / tier_data["Orders"]
+        # Prepare map data
+        map_state_data = state_data.copy()
+        map_state_data["State_Upper"] = map_state_data["State"].str.upper().str.strip()
         
-        tier_order = ["Tier 1", "Tier 2", "Tier 3"]
-        tier_data["Tier"] = pd.Categorical(tier_data["Tier"], categories=tier_order, ordered=True)
-        tier_data = tier_data.sort_values("Tier")
+        # Match coordinates
+        lats = []
+        lons = []
+        matched_orders = []
+        matched_states = []
         
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        for idx, row in map_state_data.iterrows():
+            state_name = row["State_Upper"]
+            if state_name in state_coords:
+                lat, lon = state_coords[state_name]
+                lats.append(lat)
+                lons.append(lon)
+                matched_orders.append(row["Orders"])
+                matched_states.append(row["State_Clean"])
         
-        fig.add_trace(
-            go.Bar(
-                x=tier_data["Tier"],
-                y=tier_data["Orders"],
-                name="Orders",
-                marker=dict(color=['#667eea', '#764ba2', '#f093fb']),
-                text=tier_data["Orders"],
-                textposition='outside'
-            ),
-            secondary_y=False
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=tier_data["Tier"],
-                y=tier_data["AOV"],
-                name="AOV",
-                mode='lines+markers',
-                marker=dict(color='#fee140', size=12),
-                line=dict(color='#fee140', width=3)
-            ),
-            secondary_y=True
-        )
-        
-        fig.update_layout(
-            title=dict(text="City Tier Performance", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=False, title="City Tier", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="AOV (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=60),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
+        # Create the map figure
+        if len(lats) > 0:
+            max_orders = max(matched_orders) if matched_orders else 1
+            
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scattergeo(
+                lon=lons,
+                lat=lats,
+                text=matched_states,
+                marker=dict(
+                    size=[o / max_orders * 50 + 10 for o in matched_orders],
+                    color=matched_orders,
+                    colorscale='Blues',
+                    showscale=True,
+                    colorbar=dict(title="Orders", x=1.1),
+                    line=dict(width=1, color='white'),
+                    sizemode='diameter'
+                ),
+                customdata=matched_orders,
+                hovertemplate='<b>%{text}</b><br>Orders: %{customdata:,.0f}<br><extra></extra>',
+                showlegend=False
+            ))
+            
+            fig.update_geos(
+                visible=True,
+                resolution=50,
+                scope="asia",
+                showcountries=True,
+                countrycolor="lightgray",
+                showsubunits=True,
+                subunitcolor="white",
+                lonaxis_range=[68, 97],
+                lataxis_range=[8, 37],
+                bgcolor='rgba(240,240,240,0.3)',
+                projection_type="mercator"
+            )
+            
+            fig.update_layout(
+                title=dict(text="State-wise Order Distribution (India Map)", font=dict(size=16, color='#1a1a1a')),
+                height=400,
+                paper_bgcolor='white',
+                font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
+                margin=dict(l=20, r=20, t=60, b=20)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- ROW 3: TOP 10 WITH TOGGLE ----------------
 st.markdown('<div class="section-header">🏆 Top 10 States Performance</div>', unsafe_allow_html=True)
