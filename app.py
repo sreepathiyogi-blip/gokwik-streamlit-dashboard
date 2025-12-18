@@ -230,7 +230,7 @@ def get_city_tier(pincode):
     if pd.isna(pincode):
         return 'Unknown'
     
-    pincode_str = str(pincode).strip()[:3]  # Get first 3 digits
+    pincode_str = str(pincode).strip()[:3]
     
     try:
         pincode_prefix = int(pincode_str)
@@ -239,86 +239,21 @@ def get_city_tier(pincode):
     
     # Tier 1 cities pincodes (Major metros)
     tier_1_pincodes = [
-        # Mumbai
-        400, 401,
-        # Delhi/NCR
-        110, 121, 122, 201, 122, 124, 125, 127, 128, 134,
-        # Bangalore
-        560, 562, 563,
-        # Hyderabad
-        500, 501, 502, 503, 504, 505, 508,
-        # Chennai
-        600, 601, 602, 603,
-        # Kolkata
-        700, 711, 712, 713, 721, 722, 743,
-        # Pune
-        411, 412,
-        # Ahmedabad
-        380, 382, 383,
+        400, 401, 110, 121, 122, 201, 122, 124, 125, 127, 128, 134,
+        560, 562, 563, 500, 501, 502, 503, 504, 505, 508,
+        600, 601, 602, 603, 700, 711, 712, 713, 721, 722, 743,
+        411, 412, 380, 382, 383,
     ]
     
     # Tier 2 cities pincodes
     tier_2_pincodes = [
-        # Jaipur
-        302, 303,
-        # Lucknow
-        226, 227,
-        # Kanpur
-        208, 209,
-        # Nagpur
-        440, 441, 442,
-        # Indore
-        452, 453,
-        # Bhopal
-        462, 463,
-        # Visakhapatnam
-        530, 531,
-        # Vadodara
-        390, 391,
-        # Ludhiana
-        141, 142,
-        # Agra
-        282, 283,
-        # Nashik
-        422, 423,
-        # Faridabad
-        121,
-        # Meerut
-        250, 251,
-        # Rajkot
-        360, 361,
-        # Varanasi
-        221, 222,
-        # Srinagar
-        190, 191, 192, 193, 194,
-        # Amritsar
-        143,
-        # Allahabad
-        211, 212,
-        # Ranchi
-        834, 835,
-        # Howrah
-        711,
-        # Coimbatore
-        641, 642,
-        # Vijayawada
-        520, 521,
-        # Jodhpur
-        342, 344,
-        # Madurai
-        625, 626,
-        # Raipur
-        492, 493,
-        # Kota
-        324, 325,
-        # Guwahati
-        781, 782, 783,
-        # Chandigarh
-        160, 140,
-        # Gurgaon
-        122,
-        # Noida
-        201,
+        302, 303, 226, 227, 208, 209, 440, 441, 442,
+        452, 453, 462, 463, 530, 531, 390, 391,
+        141, 142, 282, 283, 422, 423, 121,
+        250, 251, 360, 361, 221, 222, 190, 191, 192, 193, 194,
+        143, 211, 212, 834, 835, 711, 641, 642,
+        520, 521, 342, 344, 625, 626, 492, 493,
+        324, 325, 781, 782, 783, 160, 140, 122, 201,
     ]
     
     if pincode_prefix in tier_1_pincodes:
@@ -327,39 +262,6 @@ def get_city_tier(pincode):
         return 'Tier 2'
     else:
         return 'Tier 3'
-
-def map_utm_source(utm_source):
-    """Map UTM sources to platform categories"""
-    if pd.isna(utm_source):
-        return 'Other'
-    
-    utm_lower = str(utm_source).lower()
-    
-    # Meta platforms
-    if any(x in utm_lower for x in ['facebook', 'fb', 'instagram', 'ig', 'meta']):
-        return 'Meta'
-    # Google platforms
-    elif any(x in utm_lower for x in ['google', 'gdn', 'gsearch', 'adwords', 'youtube']):
-        return 'Google'
-    # Other platforms
-    elif any(x in utm_lower for x in ['twitter', 'x.com']):
-        return 'Twitter'
-    elif 'linkedin' in utm_lower:
-        return 'LinkedIn'
-    elif 'snapchat' in utm_lower:
-        return 'Snapchat'
-    elif 'tiktok' in utm_lower:
-        return 'TikTok'
-    elif 'pinterest' in utm_lower:
-        return 'Pinterest'
-    elif 'whatsapp' in utm_lower:
-        return 'WhatsApp'
-    elif any(x in utm_lower for x in ['email', 'mail']):
-        return 'Email'
-    elif any(x in utm_lower for x in ['organic', 'direct', 'referral']):
-        return 'Organic'
-    else:
-        return 'Other'
 
 # ---------------- HEADER ----------------
 st.markdown("""
@@ -401,10 +303,8 @@ if uploaded_file:
         st.error(f"❌ Missing columns: {', '.join(missing)}")
         st.stop()
 
-    # Data cleaning - handle multiple date formats
+    # Data cleaning
     df["Order Date"] = pd.to_datetime(df["Created At"], errors="coerce", dayfirst=True)
-    
-    # Remove rows with invalid dates
     df = df[df["Order Date"].notna()]
     
     df["Grand Total"] = pd.to_numeric(df["Grand Total"], errors="coerce")
@@ -414,27 +314,23 @@ if uploaded_file:
         lambda x: "COD" if "COD" in str(x) else "Prepaid"
     )
     
-    # Use existing hashed customer phone as Customer ID
+    # Customer ID
     if "Customer Phone" in df.columns:
         df["Customer ID"] = df["Customer Phone"].apply(lambda x: str(x).split('|')[0] if pd.notna(x) else "Unknown")
     elif "Customer Name" in df.columns:
         df["Customer ID"] = df["Customer Name"].apply(hash_customer_name)
     
-    # Add city tier classification based on pincode
+    # City tier classification
     if "Billing Pincode" in df.columns:
         df["City Tier"] = df["Billing Pincode"].apply(get_city_tier)
     elif "Shipping Pincode" in df.columns:
         df["City Tier"] = df["Shipping Pincode"].apply(get_city_tier)
     else:
         df["City Tier"] = "Unknown"
-    
-    # Map UTM sources to platforms
-    if "Utm Source" in df.columns:
-        df["UTM Platform"] = df["Utm Source"].apply(map_utm_source)
 
     save_data(df)
     with st.sidebar:
-        st.success("✅ File uploaded successfully")
+        st.success("✅ Data processed successfully")
 
 # ---------------- LOAD DATA ----------------
 if not uploaded_file:
@@ -447,46 +343,10 @@ if "Order Date" not in df.columns:
     st.error("⚠️ Data corrupted. Please re-upload the file.")
     st.stop()
 
-# ---------------- QUICK FILTERS (TOP BUTTONS) ----------------
-if "UTM Platform" in df.columns:
-    st.markdown('<div class="section-header">🎯 Quick Platform Filters</div>', unsafe_allow_html=True)
-    
-    # Get platform counts
-    platform_counts = df["UTM Platform"].value_counts().to_dict()
-    
-    # Create filter buttons in columns
-    cols = st.columns(8)
-    
-    platforms = ['Meta', 'Google', 'Organic', 'Email', 'WhatsApp', 'Twitter', 'LinkedIn', 'Other']
-    platform_icons = {
-        'Meta': '📱',
-        'Google': '🔍',
-        'Organic': '🌱',
-        'Email': '📧',
-        'WhatsApp': '💬',
-        'Twitter': '🐦',
-        'LinkedIn': '💼',
-        'Other': '🔗'
-    }
-    
-    # Initialize session state
-    if 'selected_platform' not in st.session_state:
-        st.session_state.selected_platform = None
-    
-    for idx, platform in enumerate(platforms):
-        with cols[idx]:
-            count = platform_counts.get(platform, 0)
-            if st.button(f"{platform_icons.get(platform, '•')} {platform}\n({count:,})", 
-                       key=f"btn_{platform}",
-                       use_container_width=True):
-                st.session_state.selected_platform = platform
-                st.rerun()
-
 # ---------------- SIDEBAR FILTERS ----------------
 with st.sidebar:
     st.markdown("### 🔍 Filters")
     
-    # Ensure valid dates exist
     valid_dates = df[df["Order Date"].notna()]
     
     if len(valid_dates) == 0:
@@ -526,24 +386,6 @@ with st.sidebar:
     else:
         tier_filter = []
     
-    # Platform filter (mapped UTM sources)
-    if "UTM Platform" in df.columns:
-        platforms = df["UTM Platform"].unique().tolist()
-        
-        # Set default based on session state
-        if 'selected_platform' in st.session_state and st.session_state.selected_platform:
-            default_platforms = [st.session_state.selected_platform]
-        else:
-            default_platforms = platforms
-        
-        platform_filter = st.multiselect(
-            "Platform (UTM)",
-            platforms,
-            default=default_platforms
-        )
-    else:
-        platform_filter = []
-    
     # UTM Source filter
     if "Utm Source" in df.columns:
         utm_sources = df["Utm Source"].dropna().unique().tolist()
@@ -574,7 +416,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # Drill-down level selector
+    # Time granularity selector
     st.markdown("### 📅 Time Granularity")
     time_grain = st.selectbox(
         "Select View",
@@ -594,15 +436,9 @@ filtered = df[
     (df["Payment Type"].isin(payment_filter))
 ]
 
-# Apply City Tier filter
 if tier_filter and "City Tier" in filtered.columns:
     filtered = filtered[filtered["City Tier"].isin(tier_filter)]
 
-# Apply Platform filter
-if platform_filter and "UTM Platform" in filtered.columns:
-    filtered = filtered[filtered["UTM Platform"].isin(platform_filter)]
-
-# Apply UTM filters if available
 if utm_filter and "Utm Source" in filtered.columns:
     filtered = filtered[filtered["Utm Source"].isin(utm_filter)]
 
@@ -620,7 +456,6 @@ avg_order_value = filtered["Grand Total"].mean()
 prepaid_orders = filtered[filtered["Payment Type"] == "Prepaid"].shape[0]
 cod_orders = filtered[filtered["Payment Type"] == "COD"].shape[0]
 
-# Calculate Payment Success Ratio
 confirmed_orders = filtered[filtered["Status"].str.contains("Confirmed|Delivered|Shipped", case=False, na=False)].shape[0]
 total_transactions = len(filtered)
 payment_success_ratio = (confirmed_orders / total_transactions * 100) if total_transactions > 0 else 0
@@ -649,7 +484,6 @@ st.markdown('<div class="section-header">📊 Revenue & Order Trends</div>', uns
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    # Dynamic revenue and orders trend based on time granularity
     if time_grain == "Daily":
         daily = filtered.groupby(filtered["Order Date"].dt.date).agg({
             "Grand Total": "sum",
@@ -676,7 +510,7 @@ with col1:
         daily.columns = ["Date", "Revenue", "Orders"]
         x_data = daily["Date"]
         title_text = "Monthly Revenue & Orders"
-    else:  # Yearly
+    else:
         filtered["Year"] = filtered["Order Date"].dt.year
         daily = filtered.groupby("Year").agg({
             "Grand Total": "sum",
@@ -727,7 +561,6 @@ with col1:
     st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    # Payment method split
     payment_split = filtered.groupby("Payment Type").agg({
         "Order Number": "count",
         "Grand Total": "sum"
@@ -761,48 +594,39 @@ st.markdown('<div class="section-header">🗺️ Geographic Analysis & City Tier
 col1, col2 = st.columns(2)
 
 with col1:
-    # India Map with state-wise orders
     if "Billing State" in filtered.columns:
         state_data = filtered.groupby("Billing State").agg({
             "Order Number": "count",
             "Grand Total": "sum"
         }).reset_index()
         state_data.columns = ["State", "Orders", "Revenue"]
-        
-        # Map state names to standard format for better visualization
         state_data["State_Clean"] = state_data["State"].str.title().str.strip()
         
-        # Create India map using scatter geo
         fig = go.Figure()
         
-        # Add state data as markers (India states)
+        # Corrected coordinates for major Indian states
         fig.add_trace(go.Scattergeo(
             lon=[77.1025, 72.8777, 88.3639, 80.2707, 78.4867, 75.7139, 85.3240, 
-                 76.2711, 73.8567, 74.7973, 78.9629, 79.0193, 93.9368, 91.8933,
-                 83.9956, 70.8022, 92.9376, 76.6413, 84.8536, 75.5762, 73.0169,
+                 76.6590, 73.8567, 74.7973, 78.9629, 79.0193, 93.9368, 91.8933,
+                 83.9956, 70.8022, 92.9376, 77.5946, 84.8536, 75.5762, 73.0169,
                  77.5946, 74.6239, 91.2868, 73.1812, 81.6296, 85.8245, 74.4977,
-                 93.7170, 84.6897, 72.5714, 76.7794, 77.4126, 72.8826],
-            lat=[28.7041, 19.0760, 22.5726, 13.0827, 17.3850, 19.0760, 25.0961,
-                 9.9312, 18.5204, 34.0837, 30.7333, 21.1702, 24.6637, 26.2006,
-                 27.0974, 22.2587, 25.4670, 12.2958, 26.8467, 31.1471, 26.0289,
+                 93.7170, 84.6897, 72.5714, 76.7794, 77.1025, 72.8826],
+            lat=[28.7041, 19.0760, 22.5726, 13.0827, 17.3850, 19.7515, 25.0961,
+                 12.2958, 18.5204, 34.0837, 30.7333, 21.1702, 24.6637, 26.2006,
+                 27.0974, 22.2587, 25.4670, 23.2599, 26.8467, 31.1471, 26.0289,
                  23.2599, 15.2993, 25.4358, 19.0330, 16.5062, 20.9517, 26.8467,
-                 26.1584, 27.0238, 21.7679, 24.5854, 28.4089, 23.0225],
+                 26.1584, 27.0238, 21.7679, 10.8505, 28.7041, 23.0225],
             text=state_data["State_Clean"],
             marker=dict(
                 size=state_data["Orders"].values / state_data["Orders"].max() * 50 + 10,
                 color=state_data["Orders"].values,
                 colorscale='Blues',
                 showscale=True,
-                colorbar=dict(
-                    title="Orders",
-                    x=1.1
-                ),
+                colorbar=dict(title="Orders", x=1.1),
                 line=dict(width=1, color='white'),
                 sizemode='diameter'
             ),
-            hovertemplate='<b>%{text}</b><br>' +
-                         'Orders: %{marker.color:,.0f}<br>' +
-                         '<extra></extra>',
+            hovertemplate='<b>%{text}</b><br>Orders: %{marker.color:,.0f}<br><extra></extra>',
             showlegend=False
         ))
         
@@ -821,10 +645,7 @@ with col1:
         )
         
         fig.update_layout(
-            title=dict(
-                text="State-wise Order Distribution (India Map)", 
-                font=dict(size=16, color='#1a1a1a')
-            ),
+            title=dict(text="State-wise Order Distribution (India Map)", font=dict(size=16, color='#1a1a1a')),
             height=400,
             paper_bgcolor='white',
             font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
@@ -834,7 +655,6 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    # City Tier Analysis
     if "City Tier" in filtered.columns:
         tier_data = filtered.groupby("City Tier").agg({
             "Order Number": "count",
@@ -843,7 +663,6 @@ with col2:
         tier_data.columns = ["Tier", "Orders", "Revenue"]
         tier_data["AOV"] = tier_data["Revenue"] / tier_data["Orders"]
         
-        # Sort by tier
         tier_order = ["Tier 1", "Tier 2", "Tier 3"]
         tier_data["Tier"] = pd.Categorical(tier_data["Tier"], categories=tier_order, ordered=True)
         tier_data = tier_data.sort_values("Tier")
@@ -927,11 +746,7 @@ if "Billing State" in filtered.columns:
             x=y_data,
             y=state_data["State"],
             orientation='h',
-            marker=dict(
-                color=color_data,
-                colorscale='Viridis',
-                showscale=False
-            ),
+            marker=dict(color=color_data, colorscale='Viridis', showscale=False),
             text=text_data,
             textposition='outside'
         ))
@@ -949,14 +764,50 @@ if "Billing State" in filtered.columns:
         
         st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- ROW 4: UTM SOURCE & CAMPAIGN ANALYSIS ----------------
+# ---------------- ROW 4: UTM CONTENT & CAMPAIGN ANALYSIS ----------------
 st.markdown('<div class="section-header">📱 Marketing Performance Analysis</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    # UTM Source analysis
-    if "Utm Source" in filtered.columns:
+    if "Utm Content" in filtered.columns:
+        utm_content_data = filtered.groupby(["Utm Content", "Payment Type"]).agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        
+        top_contents = filtered.groupby("Utm Content")["Order Number"].count().nlargest(10).index.tolist()
+        utm_content_data = utm_content_data[utm_content_data["Utm Content"].isin(top_contents)]
+        
+        fig = go.Figure()
+        
+        for payment_type in ["Prepaid", "COD"]:
+            data = utm_content_data[utm_content_data["Payment Type"] == payment_type]
+            fig.add_trace(go.Bar(
+                name=payment_type,
+                x=data["Utm Content"],
+                y=data["Order Number"],
+                marker=dict(color='#4facfe' if payment_type == "Prepaid" else '#f093fb'),
+                text=data["Order Number"],
+                textposition='inside'
+            ))
+        
+        fig.update_layout(
+            title=dict(text="Top 10 UTM Content: COD vs Prepaid", font=dict(size=16, color='#1a1a1a')),
+            height=400,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            barmode='stack',
+            xaxis=dict(showgrid=False, title="UTM Content", tickangle=-45, tickfont=dict(color='#1a1a1a', size=10), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
+            margin=dict(l=60, r=60, t=60, b=120),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    elif "Utm Source" in filtered.columns:
         utm_data = filtered.groupby("Utm Source").agg({
             "Order Number": "count",
             "Grand Total": "sum"
@@ -1004,7 +855,6 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    # Campaign analysis
     if "Utm Campaign" in filtered.columns:
         campaign_data = filtered.groupby("Utm Campaign").agg({
             "Order Number": "count",
@@ -1017,11 +867,7 @@ with col2:
             x=campaign_data["Revenue"],
             y=campaign_data["Campaign"],
             orientation='h',
-            marker=dict(
-                color=campaign_data["Revenue"],
-                colorscale='Sunset',
-                showscale=False
-            ),
+            marker=dict(color=campaign_data["Revenue"], colorscale='Sunset', showscale=False),
             text=[f"₹{x:,.0f}" for x in campaign_data["Revenue"]],
             textposition='outside'
         ))
@@ -1043,20 +889,17 @@ with col2:
 st.markdown('<div class="section-header">🎯 RFM Analysis (Recency, Frequency, Monetary)</div>', unsafe_allow_html=True)
 
 if "Customer ID" in filtered.columns:
-    # Calculate RFM metrics
     current_date = filtered["Order Date"].max()
     
     rfm_data = filtered.groupby("Customer ID").agg({
-        "Order Date": lambda x: (current_date - x.max()).days,  # Recency
-        "Order Number": "count",  # Frequency
-        "Grand Total": "sum"  # Monetary
+        "Order Date": lambda x: (current_date - x.max()).days,
+        "Order Number": "count",
+        "Grand Total": "sum"
     }).reset_index()
     
     rfm_data.columns = ["Customer ID", "Recency", "Frequency", "Monetary"]
     
-    # Calculate RFM scores (1-5 scale) with robust error handling
     def calculate_score(data, column, ascending=True):
-        """Calculate score with proper bin handling"""
         try:
             unique_values = data[column].nunique()
             if unique_values <= 1:
@@ -1068,20 +911,17 @@ if "Customer ID" in filtered.columns:
             else:
                 labels = list(range(n_bins, 0, -1))
             
-            # Try qcut first
             if column == "Frequency":
                 return pd.qcut(data[column].rank(method='first'), n_bins, labels=labels, duplicates='drop')
             else:
                 return pd.qcut(data[column], n_bins, labels=labels, duplicates='drop')
         except:
-            # Fallback to cut if qcut fails
             try:
                 if column == "Frequency":
                     return pd.cut(data[column].rank(method='first'), n_bins, labels=labels, duplicates='drop')
                 else:
                     return pd.cut(data[column], n_bins, labels=labels, duplicates='drop')
             except:
-                # Final fallback: use rank-based binning
                 ranks = data[column].rank(method='first', pct=True)
                 if ascending:
                     return pd.cut(ranks, bins=5, labels=[1, 2, 3, 4, 5])
@@ -1095,7 +935,6 @@ if "Customer ID" in filtered.columns:
     rfm_data["RFM_Score"] = rfm_data["R_Score"].astype(str) + rfm_data["F_Score"].astype(str) + rfm_data["M_Score"].astype(str)
     rfm_data["RFM_Total"] = rfm_data["R_Score"].astype(int) + rfm_data["F_Score"].astype(int) + rfm_data["M_Score"].astype(int)
     
-    # Segment customers
     def segment_customer(score):
         if score >= 13:
             return "Champions"
@@ -1113,7 +952,6 @@ if "Customer ID" in filtered.columns:
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # RFM Segment Distribution
         segment_counts = rfm_data["Segment"].value_counts().reset_index()
         segment_counts.columns = ["Segment", "Customers"]
         
@@ -1149,14 +987,10 @@ if "Customer ID" in filtered.columns:
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        # Recency Distribution
         fig = go.Figure(data=[go.Histogram(
             x=rfm_data["Recency"],
             nbinsx=30,
-            marker=dict(
-                color='#667eea',
-                line=dict(color='white', width=1)
-            )
+            marker=dict(color='#667eea', line=dict(color='white', width=1))
         )])
         
         fig.update_layout(
@@ -1173,7 +1007,6 @@ if "Customer ID" in filtered.columns:
         st.plotly_chart(fig, use_container_width=True)
     
     with col3:
-        # Frequency vs Monetary scatter
         fig = go.Figure()
         
         fig.add_trace(go.Scatter(
@@ -1205,7 +1038,7 @@ if "Customer ID" in filtered.columns:
         
         st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- ROW 6: TOP 15 CUSTOMERS (HASHED) ----------------
+# ---------------- ROW 6: TOP 15 CUSTOMERS ----------------
 st.markdown('<div class="section-header">👥 Top 15 Customers by Lifetime Value</div>', unsafe_allow_html=True)
 
 if "Customer ID" in filtered.columns:
@@ -1260,16 +1093,10 @@ if "Customer ID" in filtered.columns:
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        # Display table with hashed customer IDs
         display_clv = clv_data[["Customer ID", "Total Orders", "Total Revenue"]].copy()
         display_clv["Total Revenue"] = display_clv["Total Revenue"].apply(lambda x: f"₹{x:,.0f}")
         
-        st.dataframe(
-            display_clv,
-            use_container_width=True,
-            height=400,
-            hide_index=True
-        )
+        st.dataframe(display_clv, use_container_width=True, height=400, hide_index=True)
 
 # ---------------- ROW 7: PRODUCTS & PAYMENT MIX ----------------
 st.markdown('<div class="section-header">🛍️ Product Analysis</div>', unsafe_allow_html=True)
@@ -1277,7 +1104,6 @@ st.markdown('<div class="section-header">🛍️ Product Analysis</div>', unsafe
 col1, col2 = st.columns(2)
 
 with col1:
-    # Top products
     if "Product Name" in filtered.columns:
         product_data = filtered.groupby("Product Name").agg({
             "Order Number": "count",
@@ -1286,20 +1112,13 @@ with col1:
         product_data.columns = ["Product", "Orders", "Revenue"]
         product_data = product_data.sort_values("Orders", ascending=False).head(10)
         
-        fig = go.Figure(data=[
-            go.Bar(
-                x=product_data["Product"],
-                y=product_data["Orders"],
-                marker=dict(
-                    color=product_data["Revenue"],
-                    colorscale='Viridis',
-                    showscale=True,
-                    colorbar=dict(title="Revenue (₹)")
-                ),
-                text=product_data["Orders"],
-                textposition='outside'
-            )
-        ])
+        fig = go.Figure(data=[go.Bar(
+            x=product_data["Product"],
+            y=product_data["Orders"],
+            marker=dict(color=product_data["Revenue"], colorscale='Viridis', showscale=True, colorbar=dict(title="Revenue (₹)")),
+            text=product_data["Orders"],
+            textposition='outside'
+        )])
         
         fig.update_layout(
             title=dict(text="Top 10 Products by Orders", font=dict(size=16, color='#1a1a1a')),
@@ -1315,7 +1134,6 @@ with col1:
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    # Product-wise payment split
     if "Product Name" in filtered.columns:
         product_payment = filtered.groupby(["Product Name", "Payment Type"]).agg({
             "Order Number": "count"
@@ -1357,7 +1175,7 @@ st.markdown('<div class="section-header">📋 Detailed Order Data</div>', unsafe
 display_cols = [
     "Order Number", "Order Date", "Status", "Payment Method", 
     "Grand Total", "Customer ID", "Billing State", "Billing City", 
-    "Billing Pincode", "City Tier", "Product Name", "Utm Source", "Utm Campaign"
+    "Billing Pincode", "City Tier", "Product Name", "Utm Source", "Utm Campaign", "Utm Content"
 ]
 display_cols = [col for col in display_cols if col in filtered.columns]
 
