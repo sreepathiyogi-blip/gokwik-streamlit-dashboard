@@ -369,46 +369,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ---------------- QUICK FILTERS (TOP BUTTONS) ----------------
-if not uploaded_file:
-    df = load_data()
-    if df is not None and "UTM Platform" in df.columns:
-        st.markdown('<div class="section-header">🎯 Quick Platform Filters</div>', unsafe_allow_html=True)
-        
-        # Get platform counts
-        platform_counts = df["UTM Platform"].value_counts().to_dict()
-        
-        # Create filter buttons in columns
-        cols = st.columns(8)
-        
-        platforms = ['Meta', 'Google', 'Organic', 'Email', 'WhatsApp', 'Twitter', 'LinkedIn', 'Other']
-        platform_icons = {
-            'Meta': '📱',
-            'Google': '🔍',
-            'Organic': '🌱',
-            'Email': '📧',
-            'WhatsApp': '💬',
-            'Twitter': '🐦',
-            'LinkedIn': '💼',
-            'Other': '🔗'
-        }
-        
-        selected_platforms = []
-        for idx, platform in enumerate(platforms):
-            with cols[idx]:
-                count = platform_counts.get(platform, 0)
-                if st.button(f"{platform_icons.get(platform, '•')} {platform}\n({count:,})", 
-                           key=f"btn_{platform}",
-                           use_container_width=True):
-                    selected_platforms.append(platform)
-        
-        # Store selected platform in session state
-        if 'selected_platform' not in st.session_state:
-            st.session_state.selected_platform = None
-        
-        if selected_platforms:
-            st.session_state.selected_platform = selected_platforms[0]
-
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.markdown("### 📁 Data Upload")
@@ -486,6 +446,41 @@ if not uploaded_file:
 if "Order Date" not in df.columns:
     st.error("⚠️ Data corrupted. Please re-upload the file.")
     st.stop()
+
+# ---------------- QUICK FILTERS (TOP BUTTONS) ----------------
+if "UTM Platform" in df.columns:
+    st.markdown('<div class="section-header">🎯 Quick Platform Filters</div>', unsafe_allow_html=True)
+    
+    # Get platform counts
+    platform_counts = df["UTM Platform"].value_counts().to_dict()
+    
+    # Create filter buttons in columns
+    cols = st.columns(8)
+    
+    platforms = ['Meta', 'Google', 'Organic', 'Email', 'WhatsApp', 'Twitter', 'LinkedIn', 'Other']
+    platform_icons = {
+        'Meta': '📱',
+        'Google': '🔍',
+        'Organic': '🌱',
+        'Email': '📧',
+        'WhatsApp': '💬',
+        'Twitter': '🐦',
+        'LinkedIn': '💼',
+        'Other': '🔗'
+    }
+    
+    # Initialize session state
+    if 'selected_platform' not in st.session_state:
+        st.session_state.selected_platform = None
+    
+    for idx, platform in enumerate(platforms):
+        with cols[idx]:
+            count = platform_counts.get(platform, 0)
+            if st.button(f"{platform_icons.get(platform, '•')} {platform}\n({count:,})", 
+                       key=f"btn_{platform}",
+                       use_container_width=True):
+                st.session_state.selected_platform = platform
+                st.rerun()
 
 # ---------------- SIDEBAR FILTERS ----------------
 with st.sidebar:
