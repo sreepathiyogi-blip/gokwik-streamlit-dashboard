@@ -706,13 +706,19 @@ if "Billing State" in filtered.columns:
         )
         
         st.plotly_chart(fig, use_container_width=True)
-        
+
 # ---------------- ROW 4: UTM CONTENT, SOURCE & MEDIUM ANALYSIS ----------------
 st.markdown('<div class="section-header">📱 Marketing Performance Analysis</div>', unsafe_allow_html=True)
 
 # UTM Content Analysis
-if "Utm Content" in filtered.columns:
+if "Utm Content" in filtered.columns and "Utm Source" in filtered.columns:
     st.markdown("#### Top 10 UTM Content: COD vs Prepaid")
+    
+    # Get UTM Medium and Source for each content
+    utm_content_info = filtered.groupby("Utm Content").agg({
+        "Utm Source": "first",
+        "Utm Medium": "first" if "Utm Medium" in filtered.columns else lambda x: ""
+    }).reset_index()
     
     utm_content_data = filtered.groupby(["Utm Content", "Payment Type"]).agg({
         "Order Number": "count",
@@ -722,6 +728,7 @@ if "Utm Content" in filtered.columns:
     top_contents = filtered.groupby("Utm Content")["Order Number"].count().nlargest(10).index.tolist()
     utm_content_data = utm_content_data[utm_content_data["Utm Content"].isin(top_contents)]
     
+    # Pivot to create table
     table_data = utm_content_data.pivot_table(
         index="Utm Content",
         columns="Payment Type",
@@ -729,16 +736,31 @@ if "Utm Content" in filtered.columns:
         fill_value=0
     ).reset_index()
     
+    # Merge with source and medium info
+    table_data = table_data.merge(utm_content_info, on="Utm Content", how="left")
+    
+    # Ensure both payment columns exist
     if "Prepaid" not in table_data.columns:
         table_data["Prepaid"] = 0
     if "COD" not in table_data.columns:
         table_data["COD"] = 0
     
+    # Add total column
     table_data["Total Orders"] = table_data["Prepaid"] + table_data["COD"]
     table_data["Prepaid %"] = (table_data["Prepaid"] / table_data["Total Orders"] * 100).round(1)
     table_data["COD %"] = (table_data["COD"] / table_data["Total Orders"] * 100).round(1)
     table_data = table_data.sort_values("Total Orders", ascending=False)
-    table_data = table_data[["Utm Content", "Prepaid", "COD", "Total Orders", "Prepaid %", "COD %"]]
+    
+    # For Google, show UTM Medium; for others, show blank or N/A
+    if "Utm Medium" in table_data.columns:
+        table_data["Medium"] = table_data.apply(
+            lambda row: row["Utm Medium"] if "google" in str(row["Utm Source"]).lower() else "-",
+            axis=1
+        )
+        # Reorder columns
+        table_data = table_data[["Utm Content", "Utm Source", "Medium", "Prepaid", "COD", "Total Orders", "Prepaid %", "COD %"]]
+    else:
+        table_data = table_data[["Utm Content", "Utm Source", "Prepaid", "COD", "Total Orders", "Prepaid %", "COD %"]]
     
     st.dataframe(
         table_data.style.format({
