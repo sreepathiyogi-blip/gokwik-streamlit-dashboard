@@ -576,115 +576,82 @@ with col2:
     )
     
     st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- ROW 2: MAP & TIER ANALYSIS ----------------
 # ---------------- ROW 2: MAP & TIER ANALYSIS ----------------
 st.markdown('<div class="section-header">🗺️ Geographic Analysis & City Tiers</div>', unsafe_allow_html=True)
 
 if "Billing State" in filtered.columns:
+    # Aggregate state data
     state_data = filtered.groupby("Billing State").agg({
         "Order Number": "count",
         "Grand Total": "sum"
     }).reset_index()
     state_data.columns = ["State", "Orders", "Revenue"]
+    state_data = state_data.sort_values("Orders", ascending=False)
     
-    # Load India GeoJSON
-    import json
-    import requests
+    # Create two columns - one for visualization, one for table
+    col1, col2 = st.columns([2, 1])
     
-    # Using a public India states GeoJSON
-    geojson_url = "https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson"
-    
-    try:
-        response = requests.get(geojson_url)
-        india_states = response.json()
+    with col1:
+        # Use a simple but effective bar chart visualization
+        fig = go.Figure()
         
-        # State name mapping to match GeoJSON
-        state_name_mapping = {
-            'ANDAMAN AND NICOBAR': 'Andaman & Nicobar Island',
-            'ANDHRA PRADESH': 'Andhra Pradesh',
-            'ARUNACHAL PRADESH': 'Arunanchal Pradesh',
-            'ASSAM': 'Assam',
-            'BIHAR': 'Bihar',
-            'CHANDIGARH': 'Chandigarh',
-            'CHHATTISGARH': 'Chhattisgarh',
-            'DADRA AND NAGAR HAVELI': 'Dadara & Nagar Havelli',
-            'DAMAN AND DIU': 'Daman & Diu',
-            'DELHI': 'Delhi',
-            'GOA': 'Goa',
-            'GUJARAT': 'Gujarat',
-            'HARYANA': 'Haryana',
-            'HIMACHAL PRADESH': 'Himachal Pradesh',
-            'JAMMU AND KASHMIR': 'Jammu & Kashmir',
-            'JHARKHAND': 'Jharkhand',
-            'KARNATAKA': 'Karnataka',
-            'KERALA': 'Kerala',
-            'LADAKH': 'Ladakh',
-            'LAKSHADWEEP': 'Lakshadweep',
-            'MADHYA PRADESH': 'Madhya Pradesh',
-            'MAHARASHTRA': 'Maharashtra',
-            'MANIPUR': 'Manipur',
-            'MEGHALAYA': 'Meghalaya',
-            'MIZORAM': 'Mizoram',
-            'NAGALAND': 'Nagaland',
-            'ODISHA': 'Odisha',
-            'PUDUCHERRY': 'Puducherry',
-            'PUNJAB': 'Punjab',
-            'RAJASTHAN': 'Rajasthan',
-            'SIKKIM': 'Sikkim',
-            'TAMIL NADU': 'Tamil Nadu',
-            'TELANGANA': 'Telangana',
-            'TRIPURA': 'Tripura',
-            'UTTAR PRADESH': 'Uttar Pradesh',
-            'UTTARAKHAND': 'Uttarakhand',
-            'WEST BENGAL': 'West Bengal'
-        }
-        
-        # Normalize and map state names
-        state_data["State_Original"] = state_data["State"]
-        state_data["State_Upper"] = state_data["State"].str.upper().str.strip()
-        state_data["State_Normalized"] = state_data["State_Upper"].map(state_name_mapping)
-        
-        # Create choropleth map
-        fig = px.choropleth(
-            state_data,
-            geojson=india_states,
-            featureidkey='properties.ST_NM',
-            locations='State_Normalized',
-            color='Orders',
-            color_continuous_scale='Blues',
-            hover_name='State_Original',
-            hover_data={
-                'Orders': ':,', 
-                'Revenue': ':,.0f', 
-                'State_Normalized': False,
-                'State_Original': False
-            },
-            labels={'Orders': 'Net Units'}
-        )
-        
-        fig.update_geos(
-            fitbounds="locations",
-            visible=False
-        )
+        fig.add_trace(go.Bar(
+            y=state_data["State"].head(15),
+            x=state_data["Orders"].head(15),
+            orientation='h',
+            marker=dict(
+                color=state_data["Orders"].head(15),
+                colorscale='Blues',
+                showscale=True,
+                colorbar=dict(title="Orders", x=1.15)
+            ),
+            text=state_data["Orders"].head(15),
+            textposition='outside',
+            hovertemplate='<b>%{y}</b><br>Orders: %{x:,}<br>Revenue: ₹%{customdata:,.0f}<extra></extra>',
+            customdata=state_data["Revenue"].head(15)
+        ))
         
         fig.update_layout(
-            height=600,
-            margin=dict(l=0, r=0, t=80, b=0),
-            paper_bgcolor='white',
-            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
             title=dict(
-                text='Your sales across different states',
-                font=dict(size=20, color='#1a1a1a'),
-                x=0,
+                text='Top 15 States by Orders',
+                font=dict(size=20, color='#1a1a1a', family='Arial'),
+                x=0.02,
                 xanchor='left'
-            )
+            ),
+            height=600,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(
+                showgrid=True,
+                gridcolor='#f0f0f0',
+                title="Number of Orders",
+                tickfont=dict(color='#1a1a1a'),
+                title_font=dict(color='#1a1a1a')
+            ),
+            yaxis=dict(
+                showgrid=False,
+                tickfont=dict(color='#1a1a1a', size=11),
+                title_font=dict(color='#1a1a1a')
+            ),
+            font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
+            margin=dict(l=150, r=150, t=60, b=60)
         )
         
         st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        # Show complete state breakdown
+        st.markdown("#### 📊 All States")
         
-    except Exception as e:
-        st.error(f"Could not load map: {e}")
+        display_state_data = state_data.copy()
+        display_state_data["Revenue"] = display_state_data["Revenue"].apply(lambda x: f"₹{x:,.0f}")
+        
+        st.dataframe(
+            display_state_data,
+            use_container_width=True,
+            height=550,
+            hide_index=True
+        )
 
 # ---------------- ROW 3: TOP 10 WITH TOGGLE ----------------
 st.markdown('<div class="section-header">🏆 Top 10 States Performance</div>', unsafe_allow_html=True)
