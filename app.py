@@ -18,7 +18,7 @@ st.set_page_config(
 # ---------------- PROFESSIONAL CSS THEME ----------------
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
     /* Global Settings */
     html, body, [class*="css"] {
@@ -64,6 +64,10 @@ st.markdown("""
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
         border: 1px solid #e2e8f0;
         transition: all 0.3s ease;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
 
     .metric-container:hover {
@@ -83,7 +87,7 @@ st.markdown("""
 
     .metric-value {
         color: #1e293b;
-        font-size: 32px;
+        font-size: 28px;
         font-weight: 700;
         letter-spacing: -0.02em;
     }
@@ -96,10 +100,12 @@ st.markdown("""
         align-items: center;
         padding: 4px 10px;
         border-radius: 99px;
+        width: fit-content;
     }
     
     .delta-pos { background-color: #dcfce7; color: #166534; }
     .delta-neg { background-color: #fee2e2; color: #991b1b; }
+    .delta-neu { background-color: #f1f5f9; color: #475569; }
 
     /* Section Headers */
     .section-header {
@@ -153,25 +159,67 @@ def read_file(file):
         return pd.read_csv(file)
     return pd.read_excel(file)
 
+def format_indian_number(n):
+    """
+    Formats a number into Indian system (Lakhs/Crores) with commas.
+    Example: 1234567 -> 12,34,567
+    """
+    try:
+        n = float(n)
+        is_negative = n < 0
+        n = abs(n)
+        s = str(int(n))  # remove decimals for string processing
+        
+        if len(s) <= 3:
+            res = s
+        else:
+            # Last 3 digits
+            res = s[-3:]
+            # Remaining digits
+            s = s[:-3]
+            # Group by 2
+            groups = []
+            while s:
+                groups.append(s[-2:])
+                s = s[:-2]
+            
+            res = ",".join(reversed(groups)) + "," + res
+            
+        if is_negative:
+            res = "-" + res
+            
+        return res
+    except:
+        return str(n)
+
 def create_metric_card(label, value, previous_value=None, prefix="", suffix=""):
     delta_html = ""
-    if previous_value is not None and previous_value != 0:
+    
+    # 1. Format the main value
+    if isinstance(value, (int, float)):
+        formatted_value = format_indian_number(value)
+    else:
+        formatted_value = str(value)
+
+    # 2. Calculate Delta
+    if previous_value is not None and previous_value != 0 and isinstance(value, (int, float)):
         pct_change = ((value - previous_value) / previous_value) * 100
         color_class = "delta-pos" if pct_change >= 0 else "delta-neg"
         arrow = "↑" if pct_change >= 0 else "↓"
-        delta_html = f'<div class="metric-delta {color_class}">{arrow} {abs(pct_change):.1f}%</div>'
-    
+        delta_html = f'<div class="metric-delta {color_class}">{arrow} {abs(pct_change):.1f}% vs prev</div>'
+    elif previous_value == 0 and value > 0:
+         delta_html = f'<div class="metric-delta delta-pos">New Data</div>'
+
     return f"""
     <div class="metric-container">
         <div class="metric-label">{label}</div>
-        <div class="metric-value">{prefix}{value}{suffix}</div>
+        <div class="metric-value">{prefix}{formatted_value}{suffix}</div>
         {delta_html}
     </div>
     """
 
 def convert_df_to_excel(df):
     output = io.BytesIO()
-    # Fallback to csv if xlsxwriter is missing, though pandas usually handles it
     try:
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Data')
@@ -298,11 +346,13 @@ prepaid_count = len(filtered[filtered["Payment Type"] == "Prepaid"])
 prepaid_share = (prepaid_count / curr_orders * 100) if curr_orders else 0
 prev_prepaid_share = (len(prev_df[prev_df["Payment Type"] == "Prepaid"]) / prev_orders * 100) if prev_orders else 0
 
-with col1: st.markdown(create_metric_card("Total Revenue", f"{curr_rev/100000:.2f}L", prev_rev/100000, "₹"), unsafe_allow_html=True)
-with col2: st.markdown(create_metric_card("Total Orders", f"{curr_orders:,}", prev_orders), unsafe_allow_html=True)
-with col3: st.markdown(create_metric_card("AOV", f"{curr_aov:,.0f}", prev_aov, "₹"), unsafe_allow_html=True)
-with col4: st.markdown(create_metric_card("Prepaid %", f"{prepaid_share:.1f}", prev_prepaid_share, "", "%"), unsafe_allow_html=True)
-with col5: st.markdown(create_metric_card("Return on Ad Spend", "3.2", 2.8, "x"), unsafe_allow_html=True) # Placeholder
+# Updated calls with correct types and Indian formatting inside the function
+with col1: st.markdown(create_metric_card("Total Revenue", curr_rev, prev_rev, "₹"), unsafe_allow_html=True)
+with col2: st.markdown(create_metric_card("Total Orders", curr_orders, prev_orders), unsafe_allow_html=True)
+with col3: st.markdown(create_metric_card("AOV", curr_aov, prev_aov, "₹"), unsafe_allow_html=True)
+with col4: st.markdown(create_metric_card("Prepaid %", prepaid_share, prev_prepaid_share, "", "%"), unsafe_allow_html=True)
+# Fixed line below: passed float 3.2 instead of string "3.2"
+with col5: st.markdown(create_metric_card("Return on Ad Spend", 3.2, 2.8, "", "x"), unsafe_allow_html=True)
 
 # ---------------- CHARTS ROW 1 ----------------
 st.markdown('<div class="section-header">Performance Trends</div>', unsafe_allow_html=True)
@@ -338,7 +388,7 @@ with c1:
         margin=dict(l=20, r=20, t=40, b=20),
         legend=dict(orientation="h", y=1.1, x=0)
     )
-    fig.update_yaxes(showgrid=True, gridcolor='#f1f5f9', secondary_y=False)
+    fig.update_yaxes(showgrid=True, gridcolor='#f1f5f9', secondary_y=False, tickformat=",d") # Attempt simple format
     fig.update_yaxes(showgrid=False, secondary_y=True)
     st.plotly_chart(fig, use_container_width=True)
 
@@ -390,7 +440,7 @@ if has_source:
         st.plotly_chart(fig, use_container_width=True)
         
     with tab2:
-        # Table View - THIS FIXES THE CRASH
+        # Table View
         agg_cols = [c for c in [src_col, med_col, camp_col] if c]
         
         tbl_data = filtered.groupby(agg_cols).agg(
@@ -399,16 +449,14 @@ if has_source:
             AOV=('Grand Total', 'mean')
         ).reset_index().sort_values("Revenue", ascending=False)
         
-        # We use Streamlit's native column_config instead of pandas style (No Matplotlib needed)
+        # Streamlit Native Table
         st.dataframe(
             tbl_data,
             use_container_width=True,
             column_config={
-                "Revenue": st.column_config.ProgressColumn(
+                "Revenue": st.column_config.NumberColumn(
                     "Revenue",
-                    format="₹%d",
-                    min_value=0,
-                    max_value=int(tbl_data["Revenue"].max()),
+                    format="₹%d" # Basic format, Indian comma not natively supported in column_config yet 
                 ),
                 "AOV": st.column_config.NumberColumn(
                     "Avg Order Value",
