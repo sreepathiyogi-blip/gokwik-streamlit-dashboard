@@ -267,7 +267,6 @@ def get_city_tier(pincode):
 st.markdown("""
 <div class="dashboard-header">
     <h1>📊 GoKwik Order Analytics Dashboard</h1>
-    <p>Real-time insights into your e-commerce performance</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -707,62 +706,60 @@ if "Billing State" in filtered.columns:
         )
         
         st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- ROW 4: UTM CONTENT & CAMPAIGN ANALYSIS ----------------
+        
+# ---------------- ROW 4: UTM CONTENT, SOURCE & MEDIUM ANALYSIS ----------------
 st.markdown('<div class="section-header">📱 Marketing Performance Analysis</div>', unsafe_allow_html=True)
 
-col1, col2 = st.columns([1, 0.001])
+# UTM Content Analysis
+if "Utm Content" in filtered.columns:
+    st.markdown("#### Top 10 UTM Content: COD vs Prepaid")
+    
+    utm_content_data = filtered.groupby(["Utm Content", "Payment Type"]).agg({
+        "Order Number": "count",
+        "Grand Total": "sum"
+    }).reset_index()
+    
+    top_contents = filtered.groupby("Utm Content")["Order Number"].count().nlargest(10).index.tolist()
+    utm_content_data = utm_content_data[utm_content_data["Utm Content"].isin(top_contents)]
+    
+    table_data = utm_content_data.pivot_table(
+        index="Utm Content",
+        columns="Payment Type",
+        values="Order Number",
+        fill_value=0
+    ).reset_index()
+    
+    if "Prepaid" not in table_data.columns:
+        table_data["Prepaid"] = 0
+    if "COD" not in table_data.columns:
+        table_data["COD"] = 0
+    
+    table_data["Total Orders"] = table_data["Prepaid"] + table_data["COD"]
+    table_data["Prepaid %"] = (table_data["Prepaid"] / table_data["Total Orders"] * 100).round(1)
+    table_data["COD %"] = (table_data["COD"] / table_data["Total Orders"] * 100).round(1)
+    table_data = table_data.sort_values("Total Orders", ascending=False)
+    table_data = table_data[["Utm Content", "Prepaid", "COD", "Total Orders", "Prepaid %", "COD %"]]
+    
+    st.dataframe(
+        table_data.style.format({
+            "Prepaid": "{:,.0f}",
+            "COD": "{:,.0f}",
+            "Total Orders": "{:,.0f}",
+            "Prepaid %": "{:.1f}%",
+            "COD %": "{:.1f}%"
+        }),
+        use_container_width=True,
+        height=400,
+        hide_index=True
+    )
+
+# UTM Source and Medium Analysis
+col1, col2 = st.columns(2)
 
 with col1:
-    if "Utm Content" in filtered.columns:
-        st.markdown("#### Top 10 UTM Content: COD vs Prepaid")
+    if "Utm Source" in filtered.columns:
+        st.markdown("#### Top 10 UTM Source Performance")
         
-        utm_content_data = filtered.groupby(["Utm Content", "Payment Type"]).agg({
-            "Order Number": "count",
-            "Grand Total": "sum"
-        }).reset_index()
-        
-        top_contents = filtered.groupby("Utm Content")["Order Number"].count().nlargest(10).index.tolist()
-        utm_content_data = utm_content_data[utm_content_data["Utm Content"].isin(top_contents)]
-        
-        # Pivot to create table
-        table_data = utm_content_data.pivot_table(
-            index="Utm Content",
-            columns="Payment Type",
-            values="Order Number",
-            fill_value=0
-        ).reset_index()
-        
-        # Ensure both columns exist
-        if "Prepaid" not in table_data.columns:
-            table_data["Prepaid"] = 0
-        if "COD" not in table_data.columns:
-            table_data["COD"] = 0
-        
-        # Add total column
-        table_data["Total Orders"] = table_data["Prepaid"] + table_data["COD"]
-        table_data["Prepaid %"] = (table_data["Prepaid"] / table_data["Total Orders"] * 100).round(1)
-        table_data["COD %"] = (table_data["COD"] / table_data["Total Orders"] * 100).round(1)
-        
-        # Sort by total orders
-        table_data = table_data.sort_values("Total Orders", ascending=False)
-        
-        # Reorder columns
-        table_data = table_data[["Utm Content", "Prepaid", "COD", "Total Orders", "Prepaid %", "COD %"]]
-        
-        st.dataframe(
-            table_data.style.format({
-                "Prepaid": "{:,.0f}",
-                "COD": "{:,.0f}",
-                "Total Orders": "{:,.0f}",
-                "Prepaid %": "{:.1f}%",
-                "COD %": "{:.1f}%"
-            }),
-            use_container_width=True,
-            height=400,
-            hide_index=True
-        )
-    elif "Utm Source" in filtered.columns:
         utm_data = filtered.groupby("Utm Source").agg({
             "Order Number": "count",
             "Grand Total": "sum"
@@ -771,46 +768,103 @@ with col1:
         utm_data = utm_data.sort_values("Orders", ascending=False).head(10)
         utm_data["AOV"] = utm_data["Revenue"] / utm_data["Orders"]
         
-        fig = go.Figure()
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
         
-        fig.add_trace(go.Bar(
-            x=utm_data["Source"],
-            y=utm_data["Orders"],
-            name="Orders",
-            marker=dict(color='#667eea'),
-            text=utm_data["Orders"],
-            textposition='outside',
-            yaxis='y'
-        ))
+        fig.add_trace(
+            go.Bar(
+                x=utm_data["Source"],
+                y=utm_data["Orders"],
+                name="Orders",
+                marker=dict(color='#667eea'),
+                text=utm_data["Orders"],
+                textposition='outside'
+            ),
+            secondary_y=False
+        )
         
-        fig.add_trace(go.Scatter(
-            x=utm_data["Source"],
-            y=utm_data["AOV"],
-            name="AOV",
-            mode='lines+markers',
-            marker=dict(color='#f093fb', size=10),
-            line=dict(color='#f093fb', width=3),
-            yaxis='y2'
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=utm_data["Source"],
+                y=utm_data["AOV"],
+                name="AOV",
+                mode='lines+markers',
+                marker=dict(color='#f093fb', size=10),
+                line=dict(color='#f093fb', width=3)
+            ),
+            secondary_y=True
+        )
         
         fig.update_layout(
-            title=dict(text="UTM Source Performance: Orders & AOV", font=dict(size=16, color='#1a1a1a')),
+            title=dict(text="UTM Source: Orders & AOV", font=dict(size=16, color='#1a1a1a')),
             height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
-            xaxis=dict(showgrid=False, title="Source", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="AOV (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            xaxis=dict(showgrid=False, title="Source", tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=60),
+            margin=dict(l=60, r=60, t=60, b=100),
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
         )
         
+        fig.update_yaxes(title_text="Orders", showgrid=True, gridcolor='#f0f0f0', secondary_y=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
+        fig.update_yaxes(title_text="AOV (₹)", showgrid=False, secondary_y=True, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
+        
         st.plotly_chart(fig, use_container_width=True)
 
 with col2:
-    pass
+    if "Utm Medium" in filtered.columns:
+        st.markdown("#### Top 10 UTM Medium Performance")
+        
+        utm_medium_data = filtered.groupby("Utm Medium").agg({
+            "Order Number": "count",
+            "Grand Total": "sum"
+        }).reset_index()
+        utm_medium_data.columns = ["Medium", "Orders", "Revenue"]
+        utm_medium_data = utm_medium_data.sort_values("Orders", ascending=False).head(10)
+        utm_medium_data["AOV"] = utm_medium_data["Revenue"] / utm_medium_data["Orders"]
+        
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+        
+        fig.add_trace(
+            go.Bar(
+                x=utm_medium_data["Medium"],
+                y=utm_medium_data["Orders"],
+                name="Orders",
+                marker=dict(color='#4facfe'),
+                text=utm_medium_data["Orders"],
+                textposition='outside'
+            ),
+            secondary_y=False
+        )
+        
+        fig.add_trace(
+            go.Scatter(
+                x=utm_medium_data["Medium"],
+                y=utm_medium_data["AOV"],
+                name="AOV",
+                mode='lines+markers',
+                marker=dict(color='#fa709a', size=10),
+                line=dict(color='#fa709a', width=3)
+            ),
+            secondary_y=True
+        )
+        
+        fig.update_layout(
+            title=dict(text="UTM Medium: Orders & AOV", font=dict(size=16, color='#1a1a1a')),
+            height=400,
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            xaxis=dict(showgrid=False, title="Medium", tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
+            margin=dict(l=60, r=60, t=60, b=100),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
+        )
+        
+        fig.update_yaxes(title_text="Orders", showgrid=True, gridcolor='#f0f0f0', secondary_y=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
+        fig.update_yaxes(title_text="AOV (₹)", showgrid=False, secondary_y=True, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
+        
+        st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- ROW 5: RFM ANALYSIS ----------------
 st.markdown('<div class="section-header">🎯 RFM Analysis (Recency, Frequency, Monetary)</div>', unsafe_allow_html=True)
