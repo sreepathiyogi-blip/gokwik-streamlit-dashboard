@@ -580,121 +580,64 @@ with col2:
 # ---------------- ROW 2: MAP & TIER ANALYSIS ----------------
 st.markdown('<div class="section-header">🗺️ Geographic Analysis & City Tiers</div>', unsafe_allow_html=True)
 
-# State coordinates mapping
-state_coords = {
-    'ANDHRA PRADESH': (15.9129, 79.74),
-    'ARUNACHAL PRADESH': (28.218, 94.7278),
-    'ASSAM': (26.2006, 92.9376),
-    'BIHAR': (25.0961, 85.3131),
-    'CHHATTISGARH': (21.2787, 81.8661),
-    'GOA': (15.2993, 74.124),
-    'GUJARAT': (22.2587, 71.1924),
-    'HARYANA': (29.0588, 76.0856),
-    'HIMACHAL PRADESH': (31.1048, 77.1734),
-    'JHARKHAND': (23.6102, 85.2799),
-    'KARNATAKA': (15.3173, 75.7139),
-    'KERALA': (10.8505, 76.2711),
-    'MADHYA PRADESH': (22.9734, 78.6569),
-    'MAHARASHTRA': (19.7515, 75.7139),
-    'MANIPUR': (24.6637, 93.9063),
-    'MEGHALAYA': (25.467, 91.3662),
-    'MIZORAM': (23.1645, 92.9376),
-    'NAGALAND': (26.1584, 94.5624),
-    'ODISHA': (20.9517, 85.0985),
-    'PUNJAB': (31.1471, 75.3412),
-    'RAJASTHAN': (27.0238, 74.2179),
-    'SIKKIM': (27.533, 88.5122),
-    'TAMIL NADU': (11.1271, 78.6569),
-    'TELANGANA': (18.1124, 79.0193),
-    'TRIPURA': (23.9408, 91.9882),
-    'UTTAR PRADESH': (26.8467, 80.9462),
-    'UTTARAKHAND': (30.0668, 79.0193),
-    'WEST BENGAL': (22.9868, 87.855),
-    'DELHI': (28.7041, 77.1025),
-    'JAMMU AND KASHMIR': (33.7782, 76.5762),
-    'LADAKH': (34.1526, 77.577),
-    'PUDUCHERRY': (11.9416, 79.8083),
-    'CHANDIGARH': (30.7333, 76.7794),
-    'DADRA AND NAGAR HAVELI': (20.1809, 73.0169),
-    'DAMAN AND DIU': (20.4283, 72.8397),
-    'LAKSHADWEEP': (10.5667, 72.6417),
-    'ANDAMAN AND NICOBAR': (11.7401, 92.6586)
-}
-
 if "Billing State" in filtered.columns:
     state_data = filtered.groupby("Billing State").agg({
         "Order Number": "count",
         "Grand Total": "sum"
     }).reset_index()
     state_data.columns = ["State", "Orders", "Revenue"]
-    state_data["State_Clean"] = state_data["State"].str.title().str.strip()
     
-    # Prepare map data
-    map_state_data = state_data.copy()
-    map_state_data["State_Upper"] = map_state_data["State"].str.upper().str.strip()
+    # Load India GeoJSON
+    import json
+    import requests
     
-    # Match coordinates
-    lats = []
-    lons = []
-    matched_orders = []
-    matched_states = []
+    # Using a public India states GeoJSON
+    geojson_url = "https://gist.githubusercontent.com/jbrobst/56c13bbbf9d97d187fea01ca62ea5112/raw/e388c4cae20aa53cb5090210a42ebb9b765c0a36/india_states.geojson"
     
-    for idx, row in map_state_data.iterrows():
-        state_name = row["State_Upper"]
-        if state_name in state_coords:
-            lat, lon = state_coords[state_name]
-            lats.append(lat)
-            lons.append(lon)
-            matched_orders.append(row["Orders"])
-            matched_states.append(row["State_Clean"])
-    
-    # Create the map figure
-    if len(lats) > 0:
-        max_orders = max(matched_orders) if matched_orders else 1
+    try:
+        response = requests.get(geojson_url)
+        india_states = response.json()
         
-        fig = go.Figure()
+        # Normalize state names for matching
+        state_data["State_Normalized"] = state_data["State"].str.upper().str.strip()
         
-        fig.add_trace(go.Scattergeo(
-            lon=lons,
-            lat=lats,
-            text=matched_states,
-            marker=dict(
-                size=[o / max_orders * 50 + 10 for o in matched_orders],
-                color=matched_orders,
-                colorscale='Blues',
-                showscale=True,
-                colorbar=dict(title="Orders", x=1.1),
-                line=dict(width=1, color='white'),
-                sizemode='diameter'
-            ),
-            customdata=matched_orders,
-            hovertemplate='<b>%{text}</b><br>Orders: %{customdata:,.0f}<br><extra></extra>',
-            showlegend=False
-        ))
+        # Create choropleth map
+        fig = px.choropleth(
+            state_data,
+            geojson=india_states,
+            featureidkey='properties.ST_NM',
+            locations='State_Normalized',
+            color='Orders',
+            color_continuous_scale='Blues',
+            hover_name='State',
+            hover_data={'Orders': ':,', 'Revenue': ':,.0f', 'State_Normalized': False},
+            labels={'Orders': 'Total Orders'},
+            title='Your sales across different states'
+        )
         
         fig.update_geos(
-            visible=True,
-            resolution=50,
-            scope="asia",
-            showcountries=True,
-            countrycolor="lightgray",
-            showsubunits=True,
-            subunitcolor="white",
-            lonaxis_range=[68, 97],
-            lataxis_range=[8, 37],
-            bgcolor='rgba(240,240,240,0.3)',
-            projection_type="mercator"
+            fitbounds="locations",
+            visible=False
         )
         
         fig.update_layout(
-            title=dict(text="State-wise Order Distribution (India Map)", font=dict(size=16, color='#1a1a1a')),
-            height=400,
+            height=600,
+            margin=dict(l=0, r=0, t=80, b=0),
             paper_bgcolor='white',
             font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
-            margin=dict(l=20, r=20, t=60, b=20)
+            title=dict(
+                text='Your sales across different states',
+                font=dict(size=20, color='#1a1a1a'),
+                x=0,
+                xanchor='left'
+            )
         )
         
         st.plotly_chart(fig, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Could not load map: {e}")
+
 # ---------------- ROW 3: TOP 10 WITH TOGGLE ----------------
 st.markdown('<div class="section-header">🏆 Top 10 States Performance</div>', unsafe_allow_html=True)
 
@@ -857,6 +800,26 @@ with col2:
 # ---------------- ROW 5: RFM ANALYSIS ----------------
 st.markdown('<div class="section-header">🎯 RFM Analysis (Recency, Frequency, Monetary)</div>', unsafe_allow_html=True)
 
+# Add explanation
+st.markdown("""
+<div style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
+    <h4 style="color: #667eea; margin-top: 0;">📊 What is RFM Analysis?</h4>
+    <p style="color: #495057; margin-bottom: 10px;">
+        <strong>RFM Analysis</strong> is a customer segmentation technique that helps identify your most valuable customers based on three key metrics:
+    </p>
+    <ul style="color: #495057;">
+        <li><strong>Recency (R):</strong> How recently did the customer make a purchase? Recent customers are more likely to respond to offers.</li>
+        <li><strong>Frequency (F):</strong> How often do they purchase? Frequent buyers show loyalty and engagement.</li>
+        <li><strong>Monetary (M):</strong> How much money do they spend? High spenders contribute more to revenue.</li>
+    </ul>
+    <p style="color: #495057; margin-bottom: 0;">
+        Each customer gets scored 1-5 on each metric, helping you identify <span style="color: #43e97b; font-weight: bold;">Champions</span> (best customers), 
+        <span style="color: #30cfd0; font-weight: bold;">Loyal</span> customers, <span style="color: #fee140; font-weight: bold;">Potential</span> customers, 
+        <span style="color: #fa709a; font-weight: bold;">At Risk</span> customers, and <span style="color: #f093fb; font-weight: bold;">Lost</span> customers.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
 if "Customer ID" in filtered.columns:
     current_date = filtered["Order Date"].max()
     
@@ -1006,66 +969,6 @@ if "Customer ID" in filtered.columns:
         )
         
         st.plotly_chart(fig, use_container_width=True)
-
-# ---------------- ROW 6: TOP 15 CUSTOMERS ----------------
-st.markdown('<div class="section-header">👥 Top 15 Customers by Lifetime Value</div>', unsafe_allow_html=True)
-
-if "Customer ID" in filtered.columns:
-    clv_data = df.groupby("Customer ID").agg({
-        "Order Number": "count",
-        "Grand Total": "sum",
-        "Order Date": ["min", "max"]
-    }).reset_index()
-    
-    clv_data.columns = ["Customer ID", "Total Orders", "Total Revenue", "First Order", "Last Order"]
-    clv_data = clv_data.sort_values("Total Revenue", ascending=False).head(15)
-    
-    col1, col2 = st.columns([1, 0.001])
-    
-    with col1:
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            x=clv_data["Customer ID"],
-            y=clv_data["Total Revenue"],
-            name="Total Revenue",
-            marker=dict(color='#667eea'),
-            text=[f"₹{x:,.0f}" for x in clv_data["Total Revenue"]],
-            textposition='outside',
-            yaxis='y'
-        ))
-        
-        fig.add_trace(go.Scatter(
-            x=clv_data["Customer ID"],
-            y=clv_data["Total Orders"],
-            name="Orders",
-            mode='lines+markers',
-            marker=dict(color='#f093fb', size=10),
-            line=dict(color='#f093fb', width=3),
-            yaxis='y2'
-        ))
-        
-        fig.update_layout(
-            title=dict(text="Top 15 Customers: Revenue & Orders", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=False, tickangle=-45, title="Customer ID (Hashed)", tickfont=dict(color='#1a1a1a', size=9), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Total Revenue (₹)", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis2=dict(showgrid=False, overlaying='y', side='right', title="Total Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=10, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=120),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        display_clv = clv_data[["Customer ID", "Total Orders", "Total Revenue"]].copy()
-        display_clv["Total Revenue"] = display_clv["Total Revenue"].apply(lambda x: f"₹{x:,.0f}")
-        
-        st.dataframe(display_clv, use_container_width=True, height=400, hide_index=True)
 
 # ---------------- ROW 7: PRODUCTS & PAYMENT MIX ----------------
 st.markdown('<div class="section-header">🛍️ Product Analysis</div>', unsafe_allow_html=True)
