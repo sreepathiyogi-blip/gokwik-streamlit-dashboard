@@ -578,6 +578,7 @@ with col2:
     st.plotly_chart(fig, use_container_width=True)
 
 # ---------------- ROW 2: MAP & TIER ANALYSIS ----------------
+# ---------------- ROW 2: MAP & TIER ANALYSIS ----------------
 st.markdown('<div class="section-header">🗺️ Geographic Analysis & City Tiers</div>', unsafe_allow_html=True)
 
 if "Billing State" in filtered.columns:
@@ -598,8 +599,51 @@ if "Billing State" in filtered.columns:
         response = requests.get(geojson_url)
         india_states = response.json()
         
-        # Normalize state names for matching
-        state_data["State_Normalized"] = state_data["State"].str.upper().str.strip()
+        # State name mapping to match GeoJSON
+        state_name_mapping = {
+            'ANDAMAN AND NICOBAR': 'Andaman & Nicobar Island',
+            'ANDHRA PRADESH': 'Andhra Pradesh',
+            'ARUNACHAL PRADESH': 'Arunanchal Pradesh',
+            'ASSAM': 'Assam',
+            'BIHAR': 'Bihar',
+            'CHANDIGARH': 'Chandigarh',
+            'CHHATTISGARH': 'Chhattisgarh',
+            'DADRA AND NAGAR HAVELI': 'Dadara & Nagar Havelli',
+            'DAMAN AND DIU': 'Daman & Diu',
+            'DELHI': 'Delhi',
+            'GOA': 'Goa',
+            'GUJARAT': 'Gujarat',
+            'HARYANA': 'Haryana',
+            'HIMACHAL PRADESH': 'Himachal Pradesh',
+            'JAMMU AND KASHMIR': 'Jammu & Kashmir',
+            'JHARKHAND': 'Jharkhand',
+            'KARNATAKA': 'Karnataka',
+            'KERALA': 'Kerala',
+            'LADAKH': 'Ladakh',
+            'LAKSHADWEEP': 'Lakshadweep',
+            'MADHYA PRADESH': 'Madhya Pradesh',
+            'MAHARASHTRA': 'Maharashtra',
+            'MANIPUR': 'Manipur',
+            'MEGHALAYA': 'Meghalaya',
+            'MIZORAM': 'Mizoram',
+            'NAGALAND': 'Nagaland',
+            'ODISHA': 'Odisha',
+            'PUDUCHERRY': 'Puducherry',
+            'PUNJAB': 'Punjab',
+            'RAJASTHAN': 'Rajasthan',
+            'SIKKIM': 'Sikkim',
+            'TAMIL NADU': 'Tamil Nadu',
+            'TELANGANA': 'Telangana',
+            'TRIPURA': 'Tripura',
+            'UTTAR PRADESH': 'Uttar Pradesh',
+            'UTTARAKHAND': 'Uttarakhand',
+            'WEST BENGAL': 'West Bengal'
+        }
+        
+        # Normalize and map state names
+        state_data["State_Original"] = state_data["State"]
+        state_data["State_Upper"] = state_data["State"].str.upper().str.strip()
+        state_data["State_Normalized"] = state_data["State_Upper"].map(state_name_mapping)
         
         # Create choropleth map
         fig = px.choropleth(
@@ -609,10 +653,14 @@ if "Billing State" in filtered.columns:
             locations='State_Normalized',
             color='Orders',
             color_continuous_scale='Blues',
-            hover_name='State',
-            hover_data={'Orders': ':,', 'Revenue': ':,.0f', 'State_Normalized': False},
-            labels={'Orders': 'Total Orders'},
-            title='Your sales across different states'
+            hover_name='State_Original',
+            hover_data={
+                'Orders': ':,', 
+                'Revenue': ':,.0f', 
+                'State_Normalized': False,
+                'State_Original': False
+            },
+            labels={'Orders': 'Net Units'}
         )
         
         fig.update_geos(
@@ -970,48 +1018,63 @@ if "Customer ID" in filtered.columns:
         
         st.plotly_chart(fig, use_container_width=True)
 
-# ---------------- ROW 7: PRODUCTS & PAYMENT MIX ----------------
-st.markdown('<div class="section-header">🛍️ Product Analysis</div>', unsafe_allow_html=True)
+# ---------------- ROW 6: PRODUCTS & PAYMENT MIX ----------------
+st.markdown('<div class="section-header">🛍️ Product-Level Analysis</div>', unsafe_allow_html=True)
 
-col1, col2 = st.columns([1, 0.001])
-
-with col1:
-    if "Product Name" in filtered.columns:
-        product_data = filtered.groupby("Product Name").agg({
+if "Product Name" in filtered.columns:
+    # Split products that are pipe-separated
+    product_exploded = filtered.copy()
+    
+    # Check if products are separated by pipes
+    product_exploded["Product Name"] = product_exploded["Product Name"].astype(str)
+    
+    # Split by pipe and explode
+    product_exploded["Product Name"] = product_exploded["Product Name"].str.split('|')
+    product_exploded = product_exploded.explode("Product Name")
+    product_exploded["Product Name"] = product_exploded["Product Name"].str.strip()
+    
+    # Remove empty or NaN products
+    product_exploded = product_exploded[product_exploded["Product Name"].notna()]
+    product_exploded = product_exploded[product_exploded["Product Name"] != '']
+    product_exploded = product_exploded[product_exploded["Product Name"] != 'nan']
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Count each product occurrence (line-item level)
+        product_data = product_exploded.groupby("Product Name").agg({
             "Order Number": "count",
             "Grand Total": "sum"
         }).reset_index()
-        product_data.columns = ["Product", "Orders", "Revenue"]
-        product_data = product_data.sort_values("Orders", ascending=False).head(10)
+        product_data.columns = ["Product", "Units Sold", "Revenue"]
+        product_data = product_data.sort_values("Units Sold", ascending=False).head(10)
         
         fig = go.Figure(data=[go.Bar(
             x=product_data["Product"],
-            y=product_data["Orders"],
+            y=product_data["Units Sold"],
             marker=dict(color=product_data["Revenue"], colorscale='Viridis', showscale=True, colorbar=dict(title="Revenue (₹)")),
-            text=product_data["Orders"],
+            text=product_data["Units Sold"],
             textposition='outside'
         )])
         
         fig.update_layout(
-            title=dict(text="Top 10 Products by Orders", font=dict(size=16, color='#1a1a1a')),
+            title=dict(text="Top 10 Products by Units Sold", font=dict(size=16, color='#1a1a1a')),
             height=400,
             plot_bgcolor='white',
             paper_bgcolor='white',
             xaxis=dict(showgrid=False, tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Units Sold", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=12, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=100)
+            margin=dict(l=60, r=60, t=60, b=120)
         )
         
         st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    if "Product Name" in filtered.columns:
-        product_payment = filtered.groupby(["Product Name", "Payment Type"]).agg({
-            "Order Number": "count"
-        }).reset_index()
+    
+    with col2:
+        # Product payment split
+        product_payment = product_exploded.groupby(["Product Name", "Payment Type"]).size().reset_index(name='Count')
         
-        top_products = filtered.groupby("Product Name")["Order Number"].count().nlargest(8).index.tolist()
+        top_products = product_exploded.groupby("Product Name").size().nlargest(8).index.tolist()
         product_payment = product_payment[product_payment["Product Name"].isin(top_products)]
         
         fig = go.Figure()
@@ -1021,7 +1084,7 @@ with col2:
             fig.add_trace(go.Bar(
                 name=payment_type,
                 x=data["Product Name"],
-                y=data["Order Number"],
+                y=data["Count"],
                 marker=dict(color='#4facfe' if payment_type == "Prepaid" else '#f093fb')
             ))
         
@@ -1032,15 +1095,38 @@ with col2:
             paper_bgcolor='white',
             barmode='stack',
             xaxis=dict(showgrid=False, tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Orders", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
+            yaxis=dict(showgrid=True, gridcolor='#f0f0f0', title="Units Sold", tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
             font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=100),
+            margin=dict(l=60, r=60, t=60, b=120),
             showlegend=True,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
         )
         
         st.plotly_chart(fig, use_container_width=True)
-
+    
+    # Product performance table
+    st.markdown("#### 📊 Detailed Product Performance")
+    
+    product_detail = product_exploded.groupby("Product Name").agg({
+        "Order Number": ["count", "nunique"],
+        "Grand Total": "sum"
+    }).reset_index()
+    
+    product_detail.columns = ["Product Name", "Units Sold", "Unique Orders", "Total Revenue"]
+    product_detail["Avg Revenue per Unit"] = product_detail["Total Revenue"] / product_detail["Units Sold"]
+    product_detail = product_detail.sort_values("Units Sold", ascending=False).head(15)
+    
+    st.dataframe(
+        product_detail.style.format({
+            "Units Sold": "{:,.0f}",
+            "Unique Orders": "{:,.0f}",
+            "Total Revenue": "₹{:,.0f}",
+            "Avg Revenue per Unit": "₹{:,.0f}"
+        }),
+        use_container_width=True,
+        height=400,
+        hide_index=True
+    )
 # ---------------- DATA TABLE ----------------
 st.markdown('<div class="section-header">📋 Detailed Order Data</div>', unsafe_allow_html=True)
 
