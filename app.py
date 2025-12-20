@@ -712,7 +712,7 @@ st.markdown('<div class="section-header">📱 Marketing Performance Analysis</di
 
 # UTM Content Analysis
 if "Utm Content" in filtered.columns and "Utm Source" in filtered.columns:
-    st.markdown("#### Top 10 UTM Content: COD vs Prepaid")
+    st.markdown("#### All UTM Content: COD vs Prepaid")
     
     # Get UTM Medium and Source for each content
     utm_content_info = filtered.groupby("Utm Content").agg({
@@ -724,9 +724,6 @@ if "Utm Content" in filtered.columns and "Utm Source" in filtered.columns:
         "Order Number": "count",
         "Grand Total": "sum"
     }).reset_index()
-    
-    top_contents = filtered.groupby("Utm Content")["Order Number"].count().nlargest(10).index.tolist()
-    utm_content_data = utm_content_data[utm_content_data["Utm Content"].isin(top_contents)]
     
     # Pivot to create table
     table_data = utm_content_data.pivot_table(
