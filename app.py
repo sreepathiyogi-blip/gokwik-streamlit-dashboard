@@ -772,118 +772,66 @@ if "Utm Content" in filtered.columns and "Utm Source" in filtered.columns:
         hide_index=True
     )
 
-# UTM Source and Medium Analysis
-col1, col2 = st.columns(2)
-
-with col1:
-    if "Utm Source" in filtered.columns:
-        st.markdown("#### Top 10 UTM Source Performance")
-        
-        utm_data = filtered.groupby("Utm Source").agg({
-            "Order Number": "count",
-            "Grand Total": "sum"
-        }).reset_index()
-        utm_data.columns = ["Source", "Orders", "Revenue"]
-        utm_data = utm_data.sort_values("Orders", ascending=False).head(10)
-        utm_data["AOV"] = utm_data["Revenue"] / utm_data["Orders"]
-        
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
-        
-        fig.add_trace(
-            go.Bar(
-                x=utm_data["Source"],
-                y=utm_data["Orders"],
-                name="Orders",
-                marker=dict(color='#667eea'),
-                text=utm_data["Orders"],
-                textposition='outside'
-            ),
-            secondary_y=False
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=utm_data["Source"],
-                y=utm_data["AOV"],
-                name="AOV",
-                mode='lines+markers',
-                marker=dict(color='#f093fb', size=10),
-                line=dict(color='#f093fb', width=3)
-            ),
-            secondary_y=True
-        )
-        
-        fig.update_layout(
-            title=dict(text="UTM Source: Orders & AOV", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=False, title="Source", tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=100),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
-        )
-        
-        fig.update_yaxes(title_text="Orders", showgrid=True, gridcolor='#f0f0f0', secondary_y=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
-        fig.update_yaxes(title_text="AOV (₹)", showgrid=False, secondary_y=True, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    if "Utm Medium" in filtered.columns:
-        st.markdown("#### Top 10 UTM Medium Performance")
-        
-        utm_medium_data = filtered.groupby("Utm Medium").agg({
-            "Order Number": "count",
-            "Grand Total": "sum"
-        }).reset_index()
-        utm_medium_data.columns = ["Medium", "Orders", "Revenue"]
-        utm_medium_data = utm_medium_data.sort_values("Orders", ascending=False).head(10)
-        utm_medium_data["AOV"] = utm_medium_data["Revenue"] / utm_medium_data["Orders"]
-        
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
-        
-        fig.add_trace(
-            go.Bar(
-                x=utm_medium_data["Medium"],
-                y=utm_medium_data["Orders"],
-                name="Orders",
-                marker=dict(color='#4facfe'),
-                text=utm_medium_data["Orders"],
-                textposition='outside'
-            ),
-            secondary_y=False
-        )
-        
-        fig.add_trace(
-            go.Scatter(
-                x=utm_medium_data["Medium"],
-                y=utm_medium_data["AOV"],
-                name="AOV",
-                mode='lines+markers',
-                marker=dict(color='#fa709a', size=10),
-                line=dict(color='#fa709a', width=3)
-            ),
-            secondary_y=True
-        )
-        
-        fig.update_layout(
-            title=dict(text="UTM Medium: Orders & AOV", font=dict(size=16, color='#1a1a1a')),
-            height=400,
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=False, title="Medium", tickangle=-45, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a')),
-            font=dict(family="Arial, sans-serif", size=11, color='#1a1a1a'),
-            margin=dict(l=60, r=60, t=60, b=100),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='#1a1a1a'))
-        )
-        
-        fig.update_yaxes(title_text="Orders", showgrid=True, gridcolor='#f0f0f0', secondary_y=False, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
-        fig.update_yaxes(title_text="AOV (₹)", showgrid=False, secondary_y=True, tickfont=dict(color='#1a1a1a'), title_font=dict(color='#1a1a1a'))
-        
-        st.plotly_chart(fig, use_container_width=True)
+# UTM Source Comprehensive Analysis
+if "Utm Source" in filtered.columns:
+    st.markdown("#### UTM Source Performance Overview")
+    
+    utm_source_data = filtered.groupby(["Utm Source", "Payment Type"]).agg({
+        "Order Number": "count",
+        "Grand Total": "sum"
+    }).reset_index()
+    
+    # Pivot to create table
+    table_data = utm_source_data.pivot_table(
+        index="Utm Source",
+        columns="Payment Type",
+        values=["Order Number", "Grand Total"],
+        fill_value=0,
+        aggfunc="sum"
+    ).reset_index()
+    
+    # Flatten column names
+    table_data.columns = ['_'.join(col).strip('_') if col[1] else col[0] for col in table_data.columns.values]
+    
+    # Ensure all columns exist
+    for col in ["Order Number_Prepaid", "Order Number_COD", "Grand Total_Prepaid", "Grand Total_COD"]:
+        if col not in table_data.columns:
+            table_data[col] = 0
+    
+    # Calculate metrics
+    table_data["Total Orders"] = table_data["Order Number_Prepaid"] + table_data["Order Number_COD"]
+    table_data["Total Revenue"] = table_data["Grand Total_Prepaid"] + table_data["Grand Total_COD"]
+    table_data["AOV"] = (table_data["Total Revenue"] / table_data["Total Orders"]).round(0)
+    table_data["Prepaid %"] = (table_data["Order Number_Prepaid"] / table_data["Total Orders"] * 100).round(1)
+    table_data["COD %"] = (table_data["Order Number_COD"] / table_data["Total Orders"] * 100).round(1)
+    
+    # Rename for display
+    table_data = table_data.rename(columns={
+        "Utm Source": "UTM Source",
+        "Order Number_Prepaid": "Prepaid Orders",
+        "Order Number_COD": "COD Orders"
+    })
+    
+    # Select and reorder columns
+    display_columns = ["UTM Source", "Total Orders", "Prepaid Orders", "COD Orders", 
+                      "Prepaid %", "COD %", "Total Revenue", "AOV"]
+    table_data = table_data[display_columns]
+    table_data = table_data.sort_values("Total Orders", ascending=False)
+    
+    st.dataframe(
+        table_data.style.format({
+            "Total Orders": "{:,.0f}",
+            "Prepaid Orders": "{:,.0f}",
+            "COD Orders": "{:,.0f}",
+            "Prepaid %": "{:.1f}%",
+            "COD %": "{:.1f}%",
+            "Total Revenue": "₹{:,.0f}",
+            "AOV": "₹{:,.0f}"
+        }),
+        use_container_width=True,
+        height=400,
+        hide_index=True
+    )
 
 # ---------------- ROW 5: RFM ANALYSIS ----------------
 st.markdown('<div class="section-header">🎯 RFM Analysis (Recency, Frequency, Monetary)</div>', unsafe_allow_html=True)
